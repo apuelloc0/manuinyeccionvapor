@@ -10,20 +10,26 @@ const archiveWorkshopData = async (workshopId) => {
     const { data: workshop } = await supabase.from('workshops').select('*').eq('id', workshopId).single();
     if (!workshop) return;
 
-    // 2. Recolectar datos relacionados en paralelo
-    const [clients, inventory, orders, staff] = await Promise.all([
+    // 2. Recolectar datos relacionados en paralelo (Snapshot integral para cumplimiento y soporte)
+    const [clients, vehicles, inventory, orders, staff, payments, suggestions] = await Promise.all([
       supabase.from('clients').select('*').eq('workshop_id', workshopId),
+      supabase.from('vehicles').select('*').eq('workshop_id', workshopId),
       supabase.from('inventory').select('*').eq('workshop_id', workshopId),
       supabase.from('service_orders').select('*, order_items(*)').eq('workshop_id', workshopId),
-      supabase.from('users').select('full_name, username, role').eq('workshop_id', workshopId)
+      supabase.from('users').select('full_name, username, role').eq('workshop_id', workshopId),
+      supabase.from('platform_payments').select('*').eq('workshop_id', workshopId),
+      supabase.from('suggestions').select('*').eq('workshop_id', workshopId)
     ]);
 
     const backup = {
       workshop_info: workshop,
       clients: clients.data || [],
+      vehicles: vehicles.data || [],
       inventory: inventory.data || [],
       orders: orders.data || [],
       staff: staff.data || [],
+      payments: payments.data || [],
+      suggestions: suggestions.data || [],
       exported_at: new Date().toISOString()
     };
 
@@ -383,6 +389,46 @@ export const getSaasStats = async (req, res, next) => {
         growth: sortedGrowth
       }
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** 
+ * Crear una nueva sugerencia o reporte de feedback 
+ */
+export const createSuggestion = async (req, res, next) => {
+  try {
+    const { type, content } = req.body;
+    
+    const { data, error } = await supabase
+      .from('suggestions')
+      .insert([{
+        workshop_id: req.user.workshop_id,
+        user_id: req.user.userId,
+        type,
+        content
+      }]);
+
+    if (error) throw error;
+    res.status(201).json({ ok: true, message: '¡Gracias por tu feedback!' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Listar sugerencias para el Super Admin
+ */
+export const listSuggestions = async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('suggestions')
+      .select('*, workshops(name), users(full_name)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ ok: true, data });
   } catch (err) {
     next(err);
   }

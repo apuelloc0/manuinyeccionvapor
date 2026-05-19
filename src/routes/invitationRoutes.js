@@ -23,4 +23,8 @@ router.get('/stats', requireRole('SUPER_ADMIN'), invitation.getSaasStats);
 router.get('/platform-payments', requireRole('SUPER_ADMIN'), invitation.listSubscriptionPayments);
 router.post('/platform-payments', requireRole('SUPER_ADMIN'), invitation.addSubscriptionPayment);
 
+// Rutas para Sugerencias (Feedback)
+router.post('/suggestions', invitation.createSuggestion);
+router.get('/suggestions', requireRole('SUPER_ADMIN'), invitation.listSuggestions);
+
 export default router;

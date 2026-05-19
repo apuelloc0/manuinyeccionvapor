@@ -338,7 +338,14 @@ export const uploadImage = async (req, res, next) => {
     if (!file) return res.status(400).json({ ok: false, message: 'No se recibió ninguna imagen.' });
 
     // SEGURIDAD SaaS: Organizamos por ID de taller para aislamiento físico
-    const fileExt = file.originalname.split('.').pop();
+    let fileExt = file.originalname.split('.').pop();
+    const mimeExt = file.mimetype.split('/')[1];
+
+    // Si la extensión no coincide con el mimetype, priorizamos el mimetype
+    if (fileExt === 'blob' || !fileExt || (mimeExt && fileExt !== mimeExt)) {
+      fileExt = mimeExt || 'jpg';
+    }
+
     const fileName = `${req.user.workshop_id}/${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
@@ -353,12 +360,39 @@ export const uploadImage = async (req, res, next) => {
       return res.status(500).json({ ok: false, message: 'Error al guardar en el almacén de fotos.' });
     }
 
-    // Obtener la URL pública para guardarla en la base de datos
-    const { data: { publicUrl } } = supabase.storage
-      .from('peritaje')
-      .getPublicUrl(fileName);
+    // IMPORTANTE: Guardamos solo la RUTA RELATIVA (fileName) en la DB
+    // Esto hace que el sistema sea más flexible si cambias de dominio
+    res.json({ ok: true, url: fileName });
+  } catch (err) {
+    next(err);
+  }
+};
 
-    res.json({ ok: true, url: publicUrl });
+/** Eliminar imagen física del Storage */
+export const deleteImage = async (req, res, next) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ ok: false, message: 'No se proporcionó la ruta de la imagen.' });
+
+    // Extraer el path relativo si viene la URL completa
+    // Ejemplo: .../public/peritaje/WORKSHOP_ID/foto.jpg -> WORKSHOP_ID/foto.jpg
+    let filePath = url;
+    if (url.includes('/peritaje/')) {
+      filePath = url.split('/peritaje/').pop();
+    }
+
+    // SEGURIDAD: Verificar que el usuario solo borre fotos de su propio taller
+    if (req.user.role !== 'SUPER_ADMIN' && !filePath.startsWith(`${req.user.workshop_id}/`)) {
+      return res.status(403).json({ ok: false, message: 'No tienes permiso para eliminar este archivo.' });
+    }
+
+    const { error } = await supabase.storage
+      .from('peritaje')
+      .remove([filePath]);
+
+    if (error) throw error;
+
+    res.json({ ok: true, message: 'Archivo eliminado del servidor.' });
   } catch (err) {
     next(err);
   }

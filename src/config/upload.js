@@ -12,19 +12,8 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    const sub = req.uploadFolder || req.query?.folder || 'files';
-    const dir = path.join(uploadDir, sub);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename(req, file, cb) {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname) || '';
-    cb(null, `${unique}${ext}`);
-  },
-});
+// Cambiamos a memoryStorage para que file.buffer esté disponible para Supabase
+const storage = multer.memoryStorage();
 
 /** Ruta pública relativa para guardar en DB (ej: /uploads/expedients/xxx.jpg) */
 export const getPublicPath = (req, file) => {
