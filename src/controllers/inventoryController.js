@@ -5,11 +5,8 @@ export const list = async (req, res, next) => {
   try {
     let query = supabase.from('inventory').select('*');
 
-    // SEGURIDAD SaaS: Filtrar por taller
-    if (req.user.role !== 'SUPER_ADMIN') {
-      query = query.eq('workshop_id', req.user.workshop_id);
-    }
-
+    // En un sistema de una sola empresa, no se necesita filtrar por workshop_id.
+    // Todos los ítems de inventario pertenecen a la única empresa.
     const { data, error } = await query
       .order('name', { ascending: true });
 
@@ -29,9 +26,9 @@ export const create = async (req, res, next) => {
       .insert([{ 
         code, 
         name, 
-        category, 
+        category, // Podríamos definir categorías específicas para SteamTrack (ej. "Consumibles", "Repuestos GV", "Herramientas")
         currency: currency || 'COP',
-        workshop_id: req.user.workshop_id,
+        // workshop_id ya no es necesario o se asigna a un ID fijo de la única empresa
         stock: parseInt(stock) || 0, 
         min_stock: parseInt(minStock ?? 5) || 0, 
         price_usd: parseFloat(price) || 0,
@@ -71,9 +68,7 @@ export const update = async (req, res, next) => {
 
     let query = supabase.from('inventory').update(updates);
 
-    if (req.user.role !== 'SUPER_ADMIN') {
-      query = query.eq('workshop_id', req.user.workshop_id);
-    }
+    // No se necesita filtrar por workshop_id para la actualización.
 
     const { data, error } = await query
       .eq('id', id)
@@ -96,9 +91,7 @@ export const remove = async (req, res, next) => {
     const { id } = req.params;
     let query = supabase.from('inventory').delete();
 
-    if (req.user.role !== 'SUPER_ADMIN') {
-      query = query.eq('workshop_id', req.user.workshop_id);
-    }
+    // No se necesita filtrar por workshop_id para la eliminación.
 
     const { error } = await query.eq('id', id);
 

@@ -1,36 +1,24 @@
 /**
- * Roles del sistema Taller Automotriz (Sistema Interno)
+ * Roles del sistema SteamTrack — Gestión Integral (SGI)
  */
 export const ROLES = {
-  ADMINISTRADOR: 'ADMINISTRADOR', // Dueño / Gerente: Acceso total
-  RECEPCIONISTA: 'RECEPCIONISTA', // Registro de vehículos, clientes y facturación
-  TECNICO: 'TECNICO',             // Gestión de reparaciones, notas y repuestos
+  ADMINISTRADOR: 'Administrador', // Acceso total
+  OPERADOR: 'Operador',           // Carga de datos diarios (Módulo 4)
+  SUPERVISOR: 'Supervisor',       // Validación y edición de registros
+  GERENTE: 'Gerente',             // Visualización de BI y reportes
+  CONSULTA: 'Consulta',           // Solo lectura
 };
 
 /** Quién puede ver cada recurso */
 export const PERMISSIONS = {
   USUARIOS_GESTION: [ROLES.ADMINISTRADOR],
-  VEHICULOS_GESTION: [ROLES.ADMINISTRADOR, ROLES.RECEPCIONISTA],
-  ORDENES_GESTION: [ROLES.ADMINISTRADOR, ROLES.RECEPCIONISTA],
-  ORDENES_TECNICO: [ROLES.ADMINISTRADOR, ROLES.TECNICO],
-  FACTURACION_GESTION: [ROLES.ADMINISTRADOR, ROLES.RECEPCIONISTA],
-  INVENTARIO_GESTION: [ROLES.ADMINISTRADOR, ROLES.RECEPCIONISTA, ROLES.TECNICO],
-  REPORTES_FULL: [ROLES.ADMINISTRADOR],
+  OPERACIONES_CARGA: [ROLES.ADMINISTRADOR, ROLES.OPERADOR, ROLES.SUPERVISOR],
+  OPERACIONES_VALIDAR: [ROLES.ADMINISTRADOR, ROLES.SUPERVISOR],
+  INVENTARIO_GESTION: [ROLES.ADMINISTRADOR, ROLES.OPERADOR],
+  REPORTES_FULL: [ROLES.ADMINISTRADOR, ROLES.GERENTE],
   CONFIGURACION: [ROLES.ADMINISTRADOR],
+  AUDITORIA_VIEW: [ROLES.ADMINISTRADOR],
 };
-
-/** Estados de la Orden de Servicio */
-export const ORDER_STATUS = {
-  INGRESADO: 'INGRESADO',
-  DIAGNOSTICO: 'DIAGNOSTICO',
-  ESPERA_REPUESTOS: 'ESPERA_REPUESTOS',
-  EN_REPARACION: 'EN_REPARACION',
-  PRUEBA_RUTA: 'PRUEBA_RUTA',
-  LISTO: 'LISTO',
-  ENTREGADO: 'ENTREGADO',
-};
-
-export const ORDER_STATUS_LIST = Object.values(ORDER_STATUS);
 
 /** Prefijos moviles Venezuela 04xx (solo digitos, sin espacios; sin lineas fijas 02xx) */
 export const PHONE_PREFIXES = [

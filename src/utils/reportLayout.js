@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import supabase from '../config/db.js';
-import { WORKSHOP_CONFIG_TABLE } from '../models/WorkshopConfig.js';
+import { INSTITUTION_CONFIG_TABLE } from '../models/InstitutionConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,13 +11,7 @@ export function getUploadRoot() {
 }
 
 function getFixedPdfLogoPath() {
-  const candidates = [
-    // Ruta esperada por el usuario (repo frontend en workspace hermano)
-    path.join(__dirname, '..', '..', '..', 'students', 'client', 'src', 'pages', 'logo2.png'),
-    // Fallback si ambos repos viven dentro de un workspace superior
-    path.join(__dirname, '..', '..', '..', '..', 'students', 'client', 'src', 'pages', 'logo2.png'),
-  ];
-  return candidates.find((p) => fs.existsSync(p)) || null;
+  return null; // Eliminamos rutas de proyectos externos (students/logo2.png)
 }
 
 /**
@@ -37,7 +31,7 @@ export function resolveLogoAbsolutePath(logoUrl) {
 
 export async function loadInstitutionGeneral() {
   const { data: g, error } = await supabase
-    .from(WORKSHOP_CONFIG_TABLE)
+    .from(INSTITUTION_CONFIG_TABLE)
     .select('*')
     .eq('id', 1)
     .single();
@@ -45,18 +39,13 @@ export async function loadInstitutionGeneral() {
   if (error && error.code !== 'PGRST116') console.error('Error cargando config:', error);
 
   return {
-    nombreInstitucion: String(g?.workshop_name || 'AutoTaller').trim(),
+    nombreInstitucion: String(g?.institution_name || 'SteamTrack SGI').trim(),
     rif: String(g?.rif || '').trim(),
     telefono: String(g?.phone || '').trim(),
     email: String(g?.email || '').trim(),
     direccion: String(g?.address || '').trim(),
     ciudad: String(g?.city || 'Caracas').trim(),
     logoUrl: String(g?.logo_url || '').trim(),
-    // Campos legacy para compatibilidad con el motor de reportes
-    directorTitle: '',
-    directorName: '',
-    directorRole: 'GERENTE',
-    activeSchoolYear: '',
   };
 }
 

@@ -1,9 +1,9 @@
 import supabase from '../config/db.js';
-import { WORKSHOP_CONFIG_TABLE } from '../models/WorkshopConfig.js';
+import { INSTITUTION_CONFIG_TABLE } from '../models/InstitutionConfig.js'; // Renombrado
 import { getPublicPath } from '../config/upload.js';
 
 export const DEFAULT_GENERAL = {
-  workshop_name: 'AutoTaller',
+  institution_name: 'SteamTrack SGI', // Renombrado
   rif: 'J-12345678-9',
   address: 'Av. Principal, Sector Centro',
   city: 'Caracas',
@@ -24,7 +24,7 @@ function normalizeRate(v) {
 
 function buildGeneralPayload(body = {}) {
   return {
-    workshop_name: String(body.workshop_name ?? DEFAULT_GENERAL.workshop_name).trim(),
+    institution_name: String(body.institution_name ?? DEFAULT_GENERAL.institution_name).trim(), // Renombrado
     rif: String(body.rif ?? '').trim(),
     phone: String(body.phone ?? '').trim(),
     email: String(body.email ?? '').trim(),
@@ -40,7 +40,7 @@ function buildGeneralPayload(body = {}) {
 export const getPublicInfo = async (req, res, next) => {
   try {
     const { data: general, error } = await supabase
-      .from(WORKSHOP_CONFIG_TABLE)
+      .from(INSTITUTION_CONFIG_TABLE) // Usar nueva tabla
       .select('*')
       .eq('id', 1)
       .single();
@@ -51,7 +51,7 @@ export const getPublicInfo = async (req, res, next) => {
     res.json({
       ok: true,
       data: {
-        workshop_name: config.workshop_name,
+        institution_name: config.institution_name, // Renombrado
         rif: config.rif,
         currency_rate_usd_ves: config.currency_rate_usd_ves,
       },
@@ -64,7 +64,7 @@ export const getPublicInfo = async (req, res, next) => {
 export const getConfig = async (req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from(WORKSHOP_CONFIG_TABLE)
+      .from(INSTITUTION_CONFIG_TABLE) // Usar nueva tabla
       .select('*')
       .eq('id', 1)
       .single();
@@ -78,7 +78,7 @@ export const getConfig = async (req, res, next) => {
 
 export const updateConfig = async (req, res, next) => {
   try {
-    const { data: prev } = await supabase.from(WORKSHOP_CONFIG_TABLE).select('*').eq('id', 1).single();
+    const { data: prev } = await supabase.from(INSTITUTION_CONFIG_TABLE).select('*').eq('id', 1).single(); // Usar nueva tabla
     
     const body = req.body || {};
     const payload = buildGeneralPayload({
@@ -88,8 +88,8 @@ export const updateConfig = async (req, res, next) => {
     });
 
     const { error } = await supabase
-      .from(WORKSHOP_CONFIG_TABLE)
-      .upsert({ id: 1, ...payload, updated_at: new Date() });
+      .from(INSTITUTION_CONFIG_TABLE)
+      .upsert({ id: 1, ...payload, updated_at: new Date() }); // Usar nueva tabla
 
     if (error) throw error;
 
@@ -108,7 +108,7 @@ export const uploadLogo = async (req, res, next) => {
     const url = getPublicPath(req, req.file);
     
     const { error } = await supabase
-      .from(WORKSHOP_CONFIG_TABLE)
+      .from(INSTITUTION_CONFIG_TABLE) // Usar nueva tabla
       .update({ logo_url: url, updated_at: new Date() })
       .eq('id', 1);
 

@@ -2,25 +2,23 @@ import { Router } from 'express';
 import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
 import clientRoutes from './clientRoutes.js';
-import vehicleRoutes from './vehicleRoutes.js';
-import serviceOrderRoutes from './serviceOrderRoutes.js';
-import billingRoutes from './billingRoutes.js';
 import inventoryRoutes from './inventoryRoutes.js'; // Asegúrate de importar esto
-import invitationRoutes from './invitationRoutes.js';
-import workshopConfigRoutes from './workshopConfigRoutes.js';
+import generalConfigRoutes from './generalConfigRoutes.js';
 import dashboardRoutes from './dashboardRoutes.js';
+import reportRoutes from './reportRoutes.js'; // Importamos las rutas de reportes
+import macollaPozoRoutes from './macollaPozoRoutes.js'; // Nuevo: Módulo 4 - Datos Maestros
+import steamReportRoutes from './steamReportRoutes.js'; // Nuevo
 
 const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/clients', clientRoutes);
-router.use('/vehicles', vehicleRoutes);
-router.use('/service-orders', serviceOrderRoutes);
-router.use('/inventory', inventoryRoutes); // Agregamos la ruta
-router.use('/billing', billingRoutes);
-router.use('/invitations', invitationRoutes);
-router.use('/workshop-config', workshopConfigRoutes);
+router.use('/inventory', inventoryRoutes);
+router.use('/general-config', generalConfigRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/reports', reportRoutes); // Añadimos las rutas de reportes
+router.use('/macollas-pozos', macollaPozoRoutes); // Módulo 4 - Datos Maestros
+router.use('/steam-reports', steamReportRoutes); // Módulo 4
 
 export default router;

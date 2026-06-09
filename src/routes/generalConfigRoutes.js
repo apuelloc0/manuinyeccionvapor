@@ -10,7 +10,7 @@ const router = Router();
 router.get('/public', general.getPublicInfo);
 
 router.use(authenticate);
-router.use(requireRole(ROLES.DIRECTORA));
+router.use(requireRole(ROLES.ADMINISTRADOR));
 
 router.get('/', general.getConfig);
 router.put('/', general.updateConfig);

@@ -6,13 +6,11 @@ import { requirePermission } from '../middleware/auth.js';
 const router = Router();
 
 router.use(authenticate);
-router.use(requirePermission('REPORTES'));
+router.use(requirePermission('REPORTES_FULL'));
 
-router.get('/institutional', report.institutional);
-router.get('/occupancy', report.occupancy);
-router.get('/enrollment-by-grade-section', report.enrollmentByGradeSection);
-router.get('/users-roles', report.usersRoles);
-router.get('/students-by-grade', report.studentsListByGradeSection);
-router.get('/students-demographics', report.studentsDemographics);
+// Futuras rutas para SteamTrack (Módulo 3)
+// router.get('/operaciones-diarias', report.dailyOperations);
+// router.get('/produccion-vapor', report.steamProduction);
+// router.get('/mantenimiento', report.maintenance);
 
 export default router;

@@ -10,11 +10,6 @@ export const list = async (req, res, next) => {
       .select('*')
       .eq('active', true);
 
-    // SEGURIDAD SaaS: Filtrar por taller
-    if (req.user.role !== 'SUPER_ADMIN') {
-      query = query.eq('workshop_id', req.user.workshop_id);
-    }
-
     if (search) {
       query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,id_number.ilike.%${search}%`);
     }
@@ -33,17 +28,12 @@ export const getOne = async (req, res, next) => {
   try {
     const { data: client, error } = await supabase
       .from(CLIENTS_TABLE)
-      .select('*, vehicles(*)')
+      .select('*')
       .eq('id', req.params.id)
       .single();
 
     if (error || !client) {
       return res.status(404).json({ ok: false, message: 'Cliente no encontrado.' });
-    }
-
-    // SEGURIDAD SaaS: Verificar pertenencia
-    if (req.user.role !== 'SUPER_ADMIN' && client.workshop_id !== req.user.workshop_id) {
-      return res.status(403).json({ ok: false, message: 'Acceso denegado.' });
     }
 
     res.json({ ok: true, data: client });
@@ -56,12 +46,6 @@ export const getOne = async (req, res, next) => {
 export const create = async (req, res, next) => {
   try {
     const { id_number } = req.body;
-    const workshop_id = req.user?.workshop_id;
-
-    // SEGURIDAD SaaS: No permitir crear clientes sin un taller asociado
-    if (!workshop_id && req.user?.role !== 'SUPER_ADMIN') {
-      return res.status(403).json({ ok: false, message: 'No se pudo identificar tu taller. Por favor, reinicia sesión.' });
-    }
 
     // Verificar si el ID (Cédula/RIF) ya existe
     if (id_number) {
@@ -81,7 +65,7 @@ export const create = async (req, res, next) => {
       }
     }
 
-    const clientData = { ...req.body, workshop_id };
+    const clientData = { ...req.body };
     console.log('DEBUG [CLIENT_CREATE]: Datos a insertar:', JSON.stringify(clientData, null, 2));
 
     const { data, error } = await supabase
@@ -102,11 +86,6 @@ export const update = async (req, res, next) => {
   try {
     let query = supabase.from(CLIENTS_TABLE).update(req.body);
 
-    // SEGURIDAD SaaS: Solo actualizar si pertenece al taller
-    if (req.user.role !== 'SUPER_ADMIN') {
-      query = query.eq('workshop_id', req.user.workshop_id);
-    }
-
     const { data, error } = await query
       .eq('id', req.params.id)
       .select()
@@ -123,11 +102,6 @@ export const update = async (req, res, next) => {
 export const remove = async (req, res, next) => {
   try {
     let query = supabase.from(CLIENTS_TABLE).update({ active: false });
-
-    // SEGURIDAD SaaS: Solo desactivar si pertenece al taller
-    if (req.user.role !== 'SUPER_ADMIN') {
-      query = query.eq('workshop_id', req.user.workshop_id);
-    }
 
     const { error } = await query.eq('id', req.params.id);
 

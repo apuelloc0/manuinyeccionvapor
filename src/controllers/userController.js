@@ -8,16 +8,11 @@ export const list = async (req, res, next) => {
     const userRole = String(req.user.role || '').toUpperCase();
     let query = supabase.from('users').select('*');
 
-    // SEGURIDAD SaaS: Si NO es Super Admin, filtrar obligatoriamente por su taller
-    if (userRole === 'SUPER_ADMIN') {
-      const filterWsId = req.query.workshopId || req.query.workshop_id;
-      // El Super Admin en la lista general solo ve a otros Super Admins (lo que le compete)
-      // o filtra por taller si está realizando una auditoría.
-      query = filterWsId ? query.eq('workshop_id', filterWsId) : query.eq('role', 'SUPER_ADMIN');
-    } else if (userRole !== 'GOD_MODE') {
-      if (!req.user.workshop_id) return res.status(403).json({ ok: false, message: 'No tienes un taller asociado.' });
-      query = query.eq('workshop_id', req.user.workshop_id);
-    }
+    // En un sistema de una sola empresa, todos los usuarios pertenecen a la misma empresa.
+    // No se necesita filtrar por workshop_id.
+    // Si se desea filtrar por roles, se haría aquí.
+    // Ejemplo: Si solo los administradores pueden ver todos los usuarios, y otros roles solo a sí mismos o a usuarios de menor jerarquía.
+    // Por ahora, listamos todos los usuarios.
 
     const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -38,11 +33,6 @@ export const getOne = async (req, res, next) => {
 
     if (error || !data) {
       return res.status(404).json({ ok: false, message: 'Usuario no encontrado.' });
-    }
-
-    // SEGURIDAD SaaS: No permitir ver usuarios de otros talleres
-    if (req.user.role !== 'SUPER_ADMIN' && data.workshop_id !== req.user.workshop_id) {
-      return res.status(403).json({ ok: false, message: 'No tienes permiso para ver este usuario.' });
     }
 
     res.json({ ok: true, data });
@@ -148,31 +138,14 @@ export const create = async (req, res, next) => {
   try {
     const userData = { ...req.body };
     
-    // SEGURIDAD SaaS: Forzar que el nuevo usuario pertenezca al taller del creador
-    if (req.user?.workshop_id && !userData.workshop_id) {
-      userData.workshop_id = req.user.workshop_id;
-    }
-
-    // SEGURIDAD SaaS: Validar cuota de usuarios antes de crear
-    if (userData.workshop_id) {
-      // Límite unificado para el lanzamiento: 15 usuarios
-      const MAX_USERS_LIMIT = 15;
-
-      const { count } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('workshop_id', userData.workshop_id)
-        .neq('role', 'ADMINISTRADOR');
-
-      if (count >= MAX_USERS_LIMIT) {
-        return res.status(400).json({ ok: false, message: `Se ha alcanzado el límite de ${MAX_USERS_LIMIT} usuarios permitidos para este taller.` });
-      }
-    }
+    // En un sistema de una sola empresa, no hay workshop_id a forzar o cuotas de usuarios.
+    // El workshop_id se puede asignar a un valor fijo o eliminar si no es relevante.
+    // Por ahora, asumimos que el workshop_id se manejará a nivel de base de datos o se eliminará.
+    delete userData.workshop_id; // Eliminamos la propiedad si viene en el body para evitar conflictos
 
     if (userData.password) {
       userData.password = await bcrypt.hash(userData.password, 12);
     }
-
     const { data, error } = await supabase.from('users').insert([userData]).select().single();
     if (error) throw error;
     const { password: _, ...userWithoutPassword } = data;
@@ -197,49 +170,31 @@ export const update = async (req, res, next) => {
       return res.status(404).json({ ok: false, message: 'Usuario no encontrado.' });
     }
     
-    // SEGURIDAD SaaS: Impedir modificar usuarios que no pertenezcan al mismo taller
-    if (req.user.role !== 'SUPER_ADMIN' && user.workshop_id !== req.user.workshop_id) {
-      return res.status(403).json({ ok: false, message: 'Acceso denegado a este taller.' });
-    }
-
-    // SEGURIDAD: Protección del último SUPER_ADMIN global
-    if (user.role === 'SUPER_ADMIN' && (req.body.active === false || (req.body.role && req.body.role !== 'SUPER_ADMIN'))) {
-      const { count } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'SUPER_ADMIN')
-        .eq('active', true);
-
-      if (count <= 1) {
-        return res.status(400).json({ ok: false, message: 'No se puede desactivar o degradar al último Super Administrador de la plataforma.' });
-      }
-    }
-
-    // Impedir autodesactivación
+    // Impedir autodesactivación (sigue siendo relevante para un solo Admin)
     if (req.body.active === false && user.id === req.user.id) {
       return res.status(400).json({ ok: false, message: 'No puede desactivar su propia cuenta.' });
     }
     
-    // SEGURIDAD SAAS: Solo un SUPER_ADMIN puede asignar el rol SUPER_ADMIN
-    if (req.body.role === 'SUPER_ADMIN' && req.user?.role !== 'SUPER_ADMIN') {
+    // SEGURIDAD: Solo un ADMINISTRADOR puede asignar el rol ADMINISTRADOR
+    if (req.body.role === ROLES.ADMINISTRADOR && req.user?.role !== ROLES.ADMINISTRADOR) {
       return res.status(403).json({
         ok: false,
-        message: 'No tiene permisos para asignar el rol de Super Administrador.',
+        message: `No tiene permisos para asignar el rol de ${ROLES.ADMINISTRADOR}.`,
       });
     }
 
-    // Aseguramos que ROLES esté definido o usamos el string directo 'ADMINISTRADOR'
-    const adminRole = ROLES?.ADMINISTRADOR || 'ADMINISTRADOR';
-    if (user.role === adminRole && user.active !== false) {
+    // Protección del último ADMINISTRADOR activo
+    if (user.role === ROLES.ADMINISTRADOR && user.active !== false) {
       const { count } = await supabase
         .from('users')
         .select('*', { count: 'exact', head: true })
-        .eq('role', adminRole)
-        .eq('workshop_id', user.workshop_id) // Filtro por taller
+        .eq('role', ROLES.ADMINISTRADOR)
+        // No hay filtro por workshop_id, ya que es una sola empresa
         .eq('active', true);
 
+      // Si solo queda un administrador activo y se intenta desactivarlo o cambiar su rol
       if (count <= 1) {
-        if (req.body.role != null && req.body.role !== adminRole) {
+        if (req.body.role != null && req.body.role !== ROLES.ADMINISTRADOR) {
           return res.status(400).json({
             ok: false,
             message: 'Debe existir al menos un usuario con rol Administrador activo.',
@@ -293,37 +248,20 @@ export const remove = async (req, res, next) => {
       return res.status(404).json({ ok: false, message: 'Usuario no encontrado.' });
     }
 
-    // SEGURIDAD SaaS: Impedir eliminar usuarios de otros talleres
-    if (req.user.role !== 'SUPER_ADMIN' && user.workshop_id !== req.user.workshop_id) {
-      return res.status(403).json({ ok: false, message: 'No tienes permisos para eliminar este usuario.' });
-    }
-
-    // SEGURIDAD: Protección del último SUPER_ADMIN global
-    if (user.role === 'SUPER_ADMIN') {
-      const { count } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'SUPER_ADMIN');
+    // Protección del último ADMINISTRADOR activo
+    if (user.role === ROLES.ADMINISTRADOR) {
+      const { count } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', ROLES.ADMINISTRADOR);
       if (count <= 1) {
-        return res.status(400).json({ ok: false, message: 'No se puede eliminar al último Super Administrador de la plataforma.' });
+        return res.status(400).json({ ok: false, message: `No se puede eliminar al último ${ROLES.ADMINISTRADOR} activo.` });
       }
     }
 
-    // LÓGICA DE TALLER: Si es el último administrador del taller
-    const adminRole = ROLES?.ADMINISTRADOR || 'ADMINISTRADOR';
-    if (user.role === adminRole) {
-      const { count: adminCount } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', adminRole)
-        .eq('workshop_id', user.workshop_id) // Filtro por taller
-        .eq('active', true);
-
-      if (adminCount <= 1) {
-        // Eliminar a todos los empleados de ese taller
-        await supabase.from('users').delete().eq('workshop_id', user.workshop_id);
-        // Eliminar el taller
-        await supabase.from('workshops').delete().eq('id', user.workshop_id);
-        return res.json({ ok: true, message: 'Taller y personal eliminados al remover al último administrador.' });
-      }
-    }
+    // En un sistema de una sola empresa, no hay talleres que eliminar.
+    // La lógica de eliminar empleados de un taller y el taller mismo es SaaS-específica.
+    // Si se elimina un administrador, solo se elimina ese usuario.
+    // Si se desea una lógica de "último administrador", ya está cubierta arriba.
+    // Si se elimina un usuario, no afecta a otros usuarios ni a la "empresa" en sí.
+    // Se asume que la tabla 'workshops' ya no es relevante o se maneja de otra forma.
 
     await supabase.from('users').delete().eq('id', req.params.id);
     res.json({ ok: true, message: 'Usuario eliminado.' });
