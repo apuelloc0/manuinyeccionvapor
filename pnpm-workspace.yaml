@@ -1,0 +1,2 @@
+allowBuilds:
+  '@sentry-internal/node-cpu-profiler': set this to true or false

@@ -1,7 +1,6 @@
 import supabase from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { validateAndUseCode } from './invitationController.js';
 import { ROLES } from '../config/constants.js';
 
 /**

@@ -1,7 +1,4 @@
-import Student from '../models/Student.js';
-import Payment from '../models/Payment.js';
-import CutOffDate from '../models/CutOffDate.js';
-import AcademicConfig from '../models/AcademicConfig.js';
+
 import User from '../models/User.js';
 import PDFDocument from 'pdfkit';
 import { loadInstitutionGeneral, drawReportHeader, drawGeneratedFooter } from '../utils/reportLayout.js';
