@@ -1,4 +1,5 @@
 import supabase from '../config/db.js';
+import { logActivity } from '../services/auditService.js';
 
 /** Listar todos los repuestos */
 export const list = async (req, res, next) => {
@@ -42,6 +43,16 @@ export const create = async (req, res, next) => {
       console.error('❌ Error de Supabase al crear repuesto:', error);
       return res.status(400).json({ ok: false, message: error.message });
     }
+
+    // Auditoría
+    await logActivity({
+      user_id: req.user.id,
+      action: 'CREATE',
+      table_name: 'inventory',
+      record_id: data.id,
+      new_value: data
+    });
+
     res.status(201).json({ ok: true, data, message: 'Repuesto agregado.' });
   } catch (err) {
     next(err);

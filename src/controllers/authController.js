@@ -78,17 +78,29 @@ export const register = async (req, res, next) => {
         full_name,
         password: hashedPassword,
         role: assignedRole,
-        active: false, // Por defecto, la cuenta requiere aprobación de un administrador existente
+        active: userCount === 0, // El primer usuario (Admin) se activa automáticamente, los demás requieren aprobación
         security_questions // Guardamos las preguntas de seguridad
       }])
       .select()
       .single();
 
-    if (userError) throw userError;
+    if (userError) {
+      if (userError.code === '23505') {
+        return res.status(400).json({ ok: false, message: 'Ya existe una cuenta asociada a este correo electrónico.' });
+      }
+      console.error('❌ [AUTH_REGISTER_ERROR]:', userError.message);
+      throw userError;
+    }
+
+    // Si userCount era 0 antes de este insert, significa que este es el primer Admin.
+    // Para todos los demás (userCount > 0), el mensaje indica que requieren aprobación.
+    const successMessage = userCount === 0 
+      ? `Cuenta de ${assignedRole} creada y activada automáticamente.` 
+      : `Registro exitoso. Tu cuenta como ${assignedRole} está pendiente de aprobación por el administrador.`;
 
     res.status(201).json({ 
       ok: true, 
-      message: `Cuenta creada exitosamente como ${assignedRole}. Requiere aprobación del administrador.`
+      message: successMessage
     });
   } catch (err) {
     next(err);

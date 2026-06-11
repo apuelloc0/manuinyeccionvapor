@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import * as auth from '../controllers/authController.js';
+import * as controller from '../controllers/authController.js';
 import { authenticate } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { loginValidator, forgotPasswordValidator, resetPasswordValidator } from '../validators/authValidators.js';
 
 const router = Router();
 
-router.post('/login', loginValidator, validate, auth.login);
-router.post('/register', auth.register);
-router.get('/me', authenticate, auth.me);
+/** Rutas públicas de autenticación */
+router.post('/register', controller.register);
+router.post('/login', controller.login);
+router.get('/me', authenticate, controller.me);
 
 export default router;

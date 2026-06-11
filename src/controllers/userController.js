@@ -2,6 +2,7 @@ import supabase from '../config/db.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { ROLES } from '../config/constants.js';
+import { logActivity } from '../services/auditService.js';
 
 export const list = async (req, res, next) => {
   try {
@@ -225,6 +226,15 @@ export const update = async (req, res, next) => {
       throw updateError;
     }
     
+    // REGISTRO DE AUDITORÍA
+    await logActivity({
+      user_id: req.user.id, // El admin que realiza la acción
+      action: 'UPDATE',
+      table_name: 'users',
+      record_id: updated.id,
+      new_value: { active: updated.active, role: updated.role }
+    });
+
     const { password: _, ...updatedWithoutPassword } = updated;
     res.json({ ok: true, data: updatedWithoutPassword, message: 'Usuario actualizado.' });
   } catch (err) {

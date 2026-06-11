@@ -2,6 +2,7 @@
 import supabase from '../config/db.js';
 import { parseDateOnlyInput } from '../utils/dateOnly.js';
 import { ROLES } from '../config/constants.js';
+import { logActivity } from '../services/auditService.js';
 
 /** Listar reportes con filtros (Fecha, Pozo, Estatus) */
 export const list = async (req, res, next) => {
@@ -96,6 +97,15 @@ export const create = async (req, res, next) => {
       await updateWellAccumulatedSteam(pozo_id, data.vapor_producido_dia);
     }
 
+    // Auditoría global
+    await logActivity({
+      user_id: req.user.id,
+      action: 'CREATE',
+      table_name: 'steam_reports',
+      record_id: data.id,
+      new_value: data
+    });
+
     res.status(201).json({ ok: true, data, message: 'Reporte registrado exitosamente.' });
   } catch (err) {
     next(err);
@@ -135,6 +145,16 @@ export const update = async (req, res, next) => {
 
     const { data, error } = await supabase.from('steam_reports').update(updates).eq('id', id).select().single();
     if (error) throw error;
+
+    // Auditoría global
+    await logActivity({
+      user_id: req.user.id,
+      action: 'UPDATE',
+      table_name: 'steam_reports',
+      record_id: data.id,
+      old_value: current,
+      new_value: data
+    });
 
     // Sincronizar vapor acumulado si el reporte cambió de borrador a enviado o si cambió el valor
     if (current.status === 'draft' && data.status === 'sent') {
