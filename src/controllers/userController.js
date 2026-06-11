@@ -24,6 +24,25 @@ export const list = async (req, res, next) => {
   }
 };
 
+/** Obtener bitácora de auditoría (Solo Admin) */
+export const listLogs = async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select(`
+        *,
+        users ( id, full_name, username )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    res.json({ ok: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getOne = async (req, res, next) => {
   try {
     const { data, error } = await supabase

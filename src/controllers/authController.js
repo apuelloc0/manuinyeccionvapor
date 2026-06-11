@@ -2,6 +2,7 @@ import supabase from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { ROLES } from '../config/constants.js';
+import { logActivity } from '../services/auditService.js';
 
 /**
  * Helper para validar el token de Cloudflare Turnstile (Protección contra bots)

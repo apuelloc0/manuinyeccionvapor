@@ -63,6 +63,11 @@ export const create = async (req, res, next) => {
 export const update = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Obtenemos el estado actual antes de actualizar para la auditoría
+    const { data: current } = await supabase.from('inventory').select('*').eq('id', id).single();
+    if (!current) return res.status(404).json({ ok: false, message: 'Repuesto no encontrado.' });
+
     const { code, name, category, stock, minStock, price, currency } = req.body;
     
     // Construimos el objeto de actualización de forma segura para evitar NaN o undefined
@@ -77,11 +82,8 @@ export const update = async (req, res, next) => {
     
     updates.updated_at = new Date();
 
-    let query = supabase.from('inventory').update(updates);
-
-    // No se necesita filtrar por workshop_id para la actualización.
-
-    const { data, error } = await query
+    const { data, error } = await supabase.from('inventory')
+      .update(updates)
       .eq('id', id)
       .select()
       .single();
@@ -90,6 +92,17 @@ export const update = async (req, res, next) => {
       console.error('❌ Error de Supabase al actualizar repuesto:', error);
       return res.status(400).json({ ok: false, message: error.message });
     }
+
+    // Auditoría: Registro de la actualización con valor anterior y nuevo
+    await logActivity({
+      user_id: req.user.id,
+      action: 'UPDATE',
+      table_name: 'inventory',
+      record_id: id,
+      old_value: current,
+      new_value: data
+    });
+
     res.json({ ok: true, data, message: 'Repuesto actualizado.' });
   } catch (err) {
     next(err);
@@ -100,13 +113,19 @@ export const update = async (req, res, next) => {
 export const remove = async (req, res, next) => {
   try {
     const { id } = req.params;
-    let query = supabase.from('inventory').delete();
-
-    // No se necesita filtrar por workshop_id para la eliminación.
-
-    const { error } = await query.eq('id', id);
+    
+    const { error } = await supabase.from('inventory').delete().eq('id', id);
 
     if (error) throw error;
+
+    // Auditoría: Registro de la eliminación
+    await logActivity({
+      user_id: req.user.id,
+      action: 'DELETE',
+      table_name: 'inventory',
+      record_id: id
+    });
+
     res.json({ ok: true, message: 'Repuesto eliminado.' });
   } catch (err) {
     next(err);

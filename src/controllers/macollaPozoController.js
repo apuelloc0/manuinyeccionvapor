@@ -1,5 +1,6 @@
 import supabase from '../config/db.js';
 import { parseDateOnlyInput } from '../utils/dateOnly.js';
+import { logActivity } from '../services/auditService.js';
 
 // ==========================================
 // MACCOLLAS
@@ -31,6 +32,16 @@ export const createMacolla = async (req, res, next) => {
       .single();
 
     if (error) throw error;
+
+    // Auditoría
+    await logActivity({
+      user_id: req.user.id,
+      action: 'CREATE',
+      table_name: 'macollas',
+      record_id: data.id,
+      new_value: data
+    });
+
     res.status(201).json({ ok: true, data, message: 'Macolla creada exitosamente.' });
   } catch (err) {
     if (err.code === '23505') { // Código de error para violación de restricción UNIQUE
@@ -45,6 +56,9 @@ export const updateMacolla = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { nombre, ubicacion } = req.body;
+
+    const { data: current } = await supabase.from('macollas').select('*').eq('id', id).single();
+
     const { data, error } = await supabase
       .from('macollas')
       .update({ nombre, ubicacion, updated_at: new Date().toISOString() }) // Añadimos updated_at
@@ -53,6 +67,17 @@ export const updateMacolla = async (req, res, next) => {
       .single();
 
     if (error) throw error;
+
+    // Auditoría
+    await logActivity({
+      user_id: req.user.id,
+      action: 'UPDATE',
+      table_name: 'macollas',
+      record_id: id,
+      old_value: current,
+      new_value: data
+    });
+
     res.json({ ok: true, data, message: 'Macolla actualizada exitosamente.' });
   } catch (err) {
     if (err.code === '23505') { // Código de error para violación de restricción UNIQUE
@@ -72,6 +97,15 @@ export const removeMacolla = async (req, res, next) => {
       .eq('id', id);
 
     if (error) throw error;
+
+    // Auditoría
+    await logActivity({
+      user_id: req.user.id,
+      action: 'DELETE',
+      table_name: 'macollas',
+      record_id: id
+    });
+
     res.json({ ok: true, message: 'Macolla eliminada exitosamente.' });
   } catch (err) {
     next(err);
@@ -121,6 +155,16 @@ export const createPozo = async (req, res, next) => {
       .single();
 
     if (error) throw error;
+
+    // Auditoría
+    await logActivity({
+      user_id: req.user.id,
+      action: 'CREATE',
+      table_name: 'pozos',
+      record_id: data.id,
+      new_value: data
+    });
+
     res.status(201).json({ ok: true, data, message: 'Pozo creado exitosamente.' });
   } catch (err) {
     if (err.code === '23505') { // Código de error para violación de restricción UNIQUE
@@ -134,6 +178,9 @@ export const createPozo = async (req, res, next) => {
 export const updatePozo = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    const { data: current } = await supabase.from('pozos').select('*').eq('id', id).single();
+
     const { macolla_id, numero, estatus, ciclo_inicio, ciclo_fin } = req.body;
     const updates = { updated_at: new Date().toISOString() }; // Añadimos updated_at
 
@@ -151,6 +198,17 @@ export const updatePozo = async (req, res, next) => {
       .single();
 
     if (error) throw error;
+
+    // Auditoría
+    await logActivity({
+      user_id: req.user.id,
+      action: 'UPDATE',
+      table_name: 'pozos',
+      record_id: id,
+      old_value: current,
+      new_value: data
+    });
+
     res.json({ ok: true, data, message: 'Pozo actualizado exitosamente.' });
   } catch (err) {
     if (err.code === '23505') { // Código de error para violación de restricción UNIQUE
@@ -170,6 +228,15 @@ export const removePozo = async (req, res, next) => {
       .eq('id', id);
 
     if (error) throw error;
+
+    // Auditoría
+    await logActivity({
+      user_id: req.user.id,
+      action: 'DELETE',
+      table_name: 'pozos',
+      record_id: id
+    });
+
     res.json({ ok: true, message: 'Pozo eliminado exitosamente.' });
   } catch (err) {
     next(err);
