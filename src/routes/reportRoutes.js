@@ -1,16 +1,10 @@
 import { Router } from 'express';
-import * as report from '../controllers/reportController.js';
-import { authenticate } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/auth.js';
+import * as controller from '../controllers/reportController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-router.use(authenticate);
-router.use(requirePermission('REPORTES_FULL'));
-
-// Futuras rutas para SteamTrack (Módulo 3)
-// router.get('/operaciones-diarias', report.dailyOperations);
-// router.get('/produccion-vapor', report.steamProduction);
-// router.get('/mantenimiento', report.maintenance);
+/** Solo personal autorizado puede generar reportes de comparación */
+router.get('/production', authMiddleware, controller.getProductionReport);
 
 export default router;

@@ -7,6 +7,7 @@ export const ROLES = {
   SUPERVISOR: 'Supervisor',       // Validación y edición de registros
   GERENTE: 'Gerente',             // Visualización de BI y reportes
   CONSULTA: 'Consulta',           // Solo lectura
+  SEGURIDAD: 'Seguridad',         // Personal de seguridad
 };
 
 /** Quién puede ver cada recurso */

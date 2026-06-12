@@ -5,6 +5,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import clientRoutes from './routes/clientRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Manejador de rutas no encontradas (404)
 app.use((req, res) => {
