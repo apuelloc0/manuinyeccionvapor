@@ -180,6 +180,9 @@ export const create = async (req, res, next) => {
 
 export const update = async (req, res, next) => {
   try {
+    const adminId = req.user?.id || req.user?.userId;
+    const requesterRole = String(req.user?.role || '').toUpperCase();
+
     const { data: user, error: fetchError } = await supabase
       .from('users')
       .select('*')
@@ -190,31 +193,35 @@ export const update = async (req, res, next) => {
       return res.status(404).json({ ok: false, message: 'Usuario no encontrado.' });
     }
     
-    // Impedir autodesactivación (sigue siendo relevante para un solo Admin)
-    if (req.body.active === false && user.id === req.user.id) {
+    if (req.body.active === false && user.id === adminId) {
       return res.status(400).json({ ok: false, message: 'No puede desactivar su propia cuenta.' });
     }
     
-    // SEGURIDAD: Solo un ADMINISTRADOR puede asignar el rol ADMINISTRADOR
-    if (req.body.role === ROLES.ADMINISTRADOR && req.user?.role !== ROLES.ADMINISTRADOR) {
+    // Preparamos los datos para la actualización y para el log de auditoría
+    const updateData = {};
+    const oldValuesForLog = {};
+    const newValuesForLog = {};
+
+    // Normalizamos roles para comparación y guardado
+    const incomingRole = req.body.role ? String(req.body.role) : user.role; // Usar el rol existente si no se proporciona uno nuevo
+    const newRoleUpper = incomingRole.toUpperCase();
+    const adminRoleConst = String(ROLES.ADMINISTRADOR).toUpperCase();
+
+    if (req.body.role && newRoleUpper === adminRoleConst && requesterRole !== adminRoleConst) {
       return res.status(403).json({
         ok: false,
-        message: `No tiene permisos para asignar el rol de ${ROLES.ADMINISTRADOR}.`,
+        message: `No tiene permisos para asignar el rol de ${adminRoleConst}.`,
       });
     }
-
-    // Protección del último ADMINISTRADOR activo
-    if (user.role === ROLES.ADMINISTRADOR && user.active !== false) {
+    if (String(user.role).toUpperCase() === adminRoleConst && user.active !== false) {
       const { count } = await supabase
         .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', ROLES.ADMINISTRADOR)
-        // No hay filtro por workshop_id, ya que es una sola empresa
+        .select('id', { count: 'exact', head: true })
+        .eq('role', user.role) // Buscamos por el valor exacto que tiene en DB
         .eq('active', true);
 
-      // Si solo queda un administrador activo y se intenta desactivarlo o cambiar su rol
       if (count <= 1) {
-        if (req.body.role != null && req.body.role !== ROLES.ADMINISTRADOR) {
+        if (req.body.role && newRoleUpper !== adminRoleConst) {
           return res.status(400).json({
             ok: false,
             message: 'Debe existir al menos un usuario con rol Administrador activo.',
@@ -228,10 +235,35 @@ export const update = async (req, res, next) => {
         }
       }
     }
+    
+    // Construir updateData y old/new values para el log
+    if (req.body.role !== undefined && user.role !== req.body.role) {
+      updateData.role = req.body.role;
+      oldValuesForLog.role = user.role;
+      newValuesForLog.role = req.body.role;
+    }
+    if (req.body.active !== undefined && user.active !== req.body.active) {
+      updateData.active = req.body.active;
+      oldValuesForLog.active = user.active;
+      newValuesForLog.active = req.body.active;
+    }
+    if (req.body.full_name !== undefined && user.full_name !== req.body.full_name) {
+      updateData.full_name = req.body.full_name;
+      oldValuesForLog.full_name = user.full_name;
+      newValuesForLog.full_name = req.body.full_name;
+    }
 
-    const updateData = { ...req.body };
-    if (updateData.password && updateData.password.length >= 6) {
-      updateData.password = await bcrypt.hash(updateData.password, 12);
+    const { password } = req.body;
+    if (password && password.length >= 6) {
+      updateData.password = await bcrypt.hash(password, 12);
+      oldValuesForLog.password = '***** (anterior)';
+      newValuesForLog.password = '***** (cambiada)';
+    }
+
+    // Si no hay cambios reales, no hacemos la actualización en DB
+    if (Object.keys(updateData).length === 0) {
+      const { password: _, ...userWithoutPassword } = user; // Devolvemos el usuario original sin password
+      return res.json({ ok: true, data: userWithoutPassword, message: 'No hay cambios para actualizar.' });
     }
 
     const { data: updated, error: updateError } = await supabase
@@ -239,20 +271,28 @@ export const update = async (req, res, next) => {
       .update(updateData)
       .eq('id', req.params.id)
       .select()
-      .single();
+      .single(); // Usamos single porque esperamos un resultado
 
     if (updateError) {
-      throw updateError;
+      console.error('❌ [USER_UPDATE_DB_ERROR]:', updateError);
+      return res.status(400).json({ 
+        ok: false, 
+        message: 'Error al actualizar en base de datos. Verifique si el valor del rol es permitido.',
+        details: updateError.message 
+      });
     }
     
-    // REGISTRO DE AUDITORÍA
-    await logActivity({
-      user_id: req.user.id, // El admin que realiza la acción
-      action: 'UPDATE',
-      table_name: 'users',
-      record_id: updated.id,
-      new_value: { active: updated.active, role: updated.role }
-    });
+    // Solo logueamos si hubo cambios y tenemos un adminId
+    if (adminId && Object.keys(newValuesForLog).length > 0) {
+      logActivity({
+        user_id: adminId,
+        action: 'UPDATE',
+        table_name: 'users',
+        record_id: updated.id,
+        old_value: oldValuesForLog,
+        new_value: newValuesForLog
+      }).catch(err => console.error('⚠️ [AUDIT_ERROR]:', err.message));
+    }
 
     const { password: _, ...updatedWithoutPassword } = updated;
     res.json({ ok: true, data: updatedWithoutPassword, message: 'Usuario actualizado.' });

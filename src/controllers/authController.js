@@ -150,13 +150,16 @@ export const login = async (req, res, next) => {
     }
 
     // 3. Generar Token JWT
-    // El token ahora solo contendrá userId y role, ya no workshop_id
+    // Normalizamos el rol a mayúsculas y enviamos ambos formatos de ID por compatibilidad
+    const userRole = String(user.role || '').toUpperCase();
+
     const token = jwt.sign(
-      { userId: user.id, role: user.role },
+      { id: user.id, userId: user.id, role: userRole },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    res.json({ ok: true, token, user: { id: user.id, username: user.username, role: user.role, full_name: user.full_name } });
+
+    res.json({ ok: true, token, user: { id: user.id, username: user.username, role: userRole, full_name: user.full_name } });
   } catch (err) {
     next(err);
   }
