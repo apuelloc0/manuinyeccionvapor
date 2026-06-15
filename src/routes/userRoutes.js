@@ -1,7 +1,7 @@
 import express from 'express';
 import { list, getOne, create, update, remove, verifyUsername, verifySecurityAnswers, resetPassword, listLogs } from '../controllers/userController.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
-import { adminMiddleware } from '../middleware/adminMiddleware.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
+import { ROLES } from '../config/constants.js';
 
 const router = express.Router();
 
@@ -10,15 +10,15 @@ router.get('/verify-username/:username', verifyUsername);
 router.post('/verify-security-answers', verifySecurityAnswers);
 router.post('/reset-password', resetPassword);
 
-// Authenticated routes (some require admin)
-router.get('/', authMiddleware, adminMiddleware, list); // List all users (Admin only)
-router.get('/audit', authMiddleware, adminMiddleware, listLogs); // List audit logs (Admin only)
-router.get('/:id', authMiddleware, adminMiddleware, getOne); // Get single user (Admin only)
-router.post('/', authMiddleware, adminMiddleware, create); // Create user (Admin only)
-router.patch('/:id', authMiddleware, adminMiddleware, update); // Update user (Admin only)
-router.delete('/:id', authMiddleware, adminMiddleware, remove); // Delete user (Admin only)
+// Rutas protegidas - Requieren token válido y rol de Administrador
+router.use(authenticate);
+router.use(requireRole(ROLES.ADMINISTRADOR));
 
-// Note: The 'create' route for users might also be a public 'signup' route,
-// but for now, we'll assume admin creates users.
+router.get('/', list); 
+router.get('/audit', listLogs); 
+router.get('/:id', getOne); 
+router.post('/', create); 
+router.patch('/:id', update); 
+router.delete('/:id', remove); 
 
 export default router;

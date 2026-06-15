@@ -57,7 +57,10 @@ export const requirePermission = (permissionKey) => {
 /** Requiere uno de los roles indicados */
 export const requireRole = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    const userRole = String(req.user?.role || '').toUpperCase();
+    const allowedRoles = roles.map(r => String(r).toUpperCase());
+
+    if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({
         ok: false,
         message: 'No tiene permiso para esta sección.',

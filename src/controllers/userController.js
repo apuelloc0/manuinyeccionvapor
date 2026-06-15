@@ -6,7 +6,7 @@ import { logActivity } from '../services/auditService.js';
 
 export const list = async (req, res, next) => {
   try {
-    const userRole = String(req.user.role || '').toUpperCase();
+    const userRole = String(req.user?.role || '').toUpperCase(); // Acceso seguro a req.user.role
     let query = supabase.from('users').select('*');
 
     // En un sistema de una sola empresa, todos los usuarios pertenecen a la misma empresa.

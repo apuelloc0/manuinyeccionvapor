@@ -1,23 +1,23 @@
 import { Router } from 'express';
 import * as controller from '../controllers/macollaPozoController.js';
-import { authenticate, requirePermission } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { createMacollaValidator, updateMacollaValidator, createPozoValidator, updatePozoValidator } from '../validators/macollaPozoValidators.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
+import { ROLES } from '../config/constants.js';
 
 const router = Router();
 
+// Todas las rutas de macollas y pozos requieren autenticación
 router.use(authenticate);
 
 // Rutas para Macollas
 router.get('/macollas', controller.listMacollas);
-router.post('/macollas', requirePermission('OPERACIONES_VALIDAR'), createMacollaValidator, validate, controller.createMacolla);
-router.put('/macollas/:id', requirePermission('OPERACIONES_VALIDAR'), updateMacollaValidator, validate, controller.updateMacolla);
-router.delete('/macollas/:id', requirePermission('OPERACIONES_VALIDAR'), controller.removeMacolla);
+router.post('/macollas', requireRole(ROLES.ADMINISTRADOR), controller.createMacolla);
+router.put('/macollas/:id', requireRole(ROLES.ADMINISTRADOR), controller.updateMacolla);
+router.delete('/macollas/:id', requireRole(ROLES.ADMINISTRADOR), controller.removeMacolla);
 
 // Rutas para Pozos
 router.get('/pozos', controller.listPozos);
-router.post('/pozos', requirePermission('OPERACIONES_VALIDAR'), createPozoValidator, validate, controller.createPozo);
-router.put('/pozos/:id', requirePermission('OPERACIONES_VALIDAR'), updatePozoValidator, validate, controller.updatePozo);
-router.delete('/pozos/:id', requirePermission('OPERACIONES_VALIDAR'), controller.removePozo);
+router.post('/pozos', requireRole(ROLES.ADMINISTRADOR), controller.createPozo);
+router.put('/pozos/:id', requireRole(ROLES.ADMINISTRADOR), controller.updatePozo);
+router.delete('/pozos/:id', requireRole(ROLES.ADMINISTRADOR), controller.removePozo);
 
 export default router;

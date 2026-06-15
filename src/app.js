@@ -2,10 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import authRoutes from './routes/authRoutes.js';
-import userRoutes from './routes/userRoutes.js';
-import clientRoutes from './routes/clientRoutes.js';
-import inventoryRoutes from './routes/inventoryRoutes.js';
-import reportRoutes from './routes/reportRoutes.js';
+import apiRoutes from './routes/index.js'; // Importamos el router principal
 
 const app = express();
 
@@ -21,11 +18,8 @@ app.use(cors());
 app.use(express.json());
 
 // Definición de rutas base
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/clients', clientRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/reports', reportRoutes);
+app.use('/api/auth', authRoutes); // Las rutas de autenticación pueden ir separadas o dentro de apiRoutes
+app.use('/api', apiRoutes); // Montamos el router principal bajo /api
 
 // Manejador de rutas no encontradas (404)
 app.use((req, res) => {

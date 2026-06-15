@@ -29,20 +29,23 @@ export const updateMacollaValidator = [
 // Validadores para Pozos
 export const createPozoValidator = [
   body('macolla_id')
-    .isUUID().withMessage('ID de macolla inválido.'),
+    .optional({ nullable: true, checkFalsy: true })
+    .isUUID().withMessage('ID de macolla debe ser un identificador válido.'),
   body('numero')
     .notEmpty().withMessage('El número de pozo es requerido.')
     .isString().withMessage('El número de pozo debe ser una cadena de texto.')
     .isLength({ max: 50 }).withMessage('El número de pozo no puede exceder los 50 caracteres.'),
   body('estatus')
-    .isIn(['En inyección', 'En espera', 'En mantenimiento']).withMessage('Estatus de pozo inválido. Debe ser "En inyección", "En espera" o "En mantenimiento".'),
+    .isIn(['En inyección', 'En espera', 'En mantenimiento', 'En Espera de Reactivación']).withMessage('Estatus de pozo inválido. Debe ser "En inyección", "En espera", "En mantenimiento" o "En Espera de Reactivación".'),
   body('ciclo_inicio').optional({ nullable: true, checkFalsy: true }).isISO8601().withMessage('Formato de fecha de inicio de ciclo inválido (YYYY-MM-DD).').toDate(),
   body('ciclo_fin').optional({ nullable: true, checkFalsy: true }).isISO8601().withMessage('Formato de fecha de fin de ciclo inválido (YYYY-MM-DD).').toDate(),
 ];
 
 export const updatePozoValidator = [
   param('id').isUUID().withMessage('ID de pozo inválido.'),
-  body('macolla_id').optional().isUUID().withMessage('ID de macolla inválido.'),
+  body('macolla_id')
+    .optional({ nullable: true, checkFalsy: true })
+    .isUUID().withMessage('ID de macolla debe ser un identificador válido.'),
   body('numero')
     .optional()
     .notEmpty().withMessage('El número de pozo es requerido.')
@@ -50,7 +53,7 @@ export const updatePozoValidator = [
     .isLength({ max: 50 }).withMessage('El número de pozo no puede exceder los 50 caracteres.'),
   body('estatus')
     .optional()
-    .isIn(['En inyección', 'En espera', 'En mantenimiento']).withMessage('Estatus de pozo inválido. Debe ser "En inyección", "En espera" o "En mantenimiento".'),
+    .isIn(['En inyección', 'En espera', 'En mantenimiento', 'En Espera de Reactivación']).withMessage('Estatus de pozo inválido. Debe ser "En inyección", "En espera", "En mantenimiento" o "En Espera de Reactivación".'),
   body('ciclo_inicio').optional({ nullable: true, checkFalsy: true }).isISO8601().withMessage('Formato de fecha de inicio de ciclo inválido (YYYY-MM-DD).').toDate(),
   body('ciclo_fin').optional({ nullable: true, checkFalsy: true }).isISO8601().withMessage('Formato de fecha de fin de ciclo inválido (YYYY-MM-DD).').toDate(),
 ];

@@ -11,7 +11,7 @@ export const listMacollas = async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('macollas')
-      .select('*')
+      .select('*, pozos(*)')
       .order('nombre', { ascending: true });
 
     if (error) throw error;
