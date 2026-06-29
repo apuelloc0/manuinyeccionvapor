@@ -8,6 +8,7 @@ export const ROLES = {
   GERENTE: 'Gerente',             // Visualización de BI y reportes
   CONSULTA: 'Consulta',           // Solo lectura
   SEGURIDAD: 'Seguridad',         // Personal de seguridad
+  RELACIONES_LABORALES: 'Relaciones Laborales', // Nuevo rol para RRHH
 };
 
 /** Quién puede ver cada recurso */

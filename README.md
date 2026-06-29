@@ -1,145 +1,168 @@
-# students-back
+# Manu — Backend (Inyección de Vapor)
 
-Backend del sistema de gestión de estudiantes: Node.js, Express 5 y MongoDB.
+API REST del sistema **Manu / SteamTrack** para gestión de operaciones de inyección de vapor: usuarios, macollas, pozos y registros diarios de producción.
+
+**Stack:** Node.js 18+, Express 5, Supabase (PostgreSQL), JWT.
 
 ## Requisitos
 
 - Node.js 18+
-- MongoDB (local o Atlas)
+- Proyecto Supabase configurado con las tablas del sistema (`users`, `macollas`, `pozos`, `registros_diarios`, `audit_logs`, etc.)
 
 ## Instalación
 
 ```bash
-npm install
-cp .env.example .env
-# Editar .env con MONGODB_URI y JWT_SECRET
+pnpm install
+# o: npm install
 ```
+
+Crear un archivo `.env` en la raíz de `/back` con al menos:
+
+```env
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+JWT_SECRET=una_clave_secreta_larga
+
+# Opcionales
+PORT=4000
+NODE_ENV=development
+UPLOAD_PATH=./uploads
+MAX_FILE_SIZE_MB=10
+
+# Producción — protección anti-bots (Cloudflare Turnstile)
+ENABLE_TURNSTILE=false
+TURNSTILE_SECRET_KEY=
+```
+
+> Usa la **service role key** de Supabase en el backend, no la anon key.
 
 ## Uso
 
 ```bash
 # Desarrollo (recarga automática)
-npm run dev
+pnpm run dev
 
 # Producción
-npm start
+pnpm start
 ```
 
-Crear usuario inicial (DIRECTORA):
+Crear usuario administrador inicial:
 
 ```bash
-npm run seed
-# Usuario: admin, Contraseña: admin123
+pnpm run seed
+# Usuario: admin  |  Contraseña: adminpassword
 ```
 
-## API
+El primer usuario registrado vía `/api/auth/register` también se activa automáticamente como **Administrador** si la tabla `users` está vacía. Los demás quedan pendientes de aprobación.
 
-Base URL: `http://localhost:4000` (o el `PORT` de `.env`).
+Servidor por defecto: `http://localhost:4000`
 
-### Autenticación (público)
+## Autenticación
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/api/auth/login` | Login (username, password) |
-| GET | `/api/auth/me` | Usuario actual (requiere token) |
-| POST | `/api/auth/forgot-password` | Recuperación (username, answers[]) |
-| POST | `/api/auth/reset-password` | Nueva contraseña (resetToken, newPassword) |
+Rutas protegidas requieren el header:
 
-Header para rutas protegidas: `Authorization: Bearer <token>`.
+```
+Authorization: Bearer <token>
+```
 
-### Roles y permisos
+El token JWT expira en **24 horas**.
 
-- **DIRECTORA**: acceso total.
-- **ADMINISTRADOR**: registro de pagos, solvencias, registro/modificación de estudiantes.
-- **SECRETARIA**: lista de estudiantes (y documentos según configuración).
+### Autenticación (`/api/auth`)
 
-### Estudiantes
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| POST | `/api/auth/register` | No | Registro (email, password, full_name, security_questions) |
+| POST | `/api/auth/login` | No | Login (username, password) |
+| GET | `/api/auth/me` | Sí | Usuario autenticado actual |
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/students` | Lista (query: year, section, enrollmentType, search) |
-| GET | `/api/students/quota` | Control de cupos por año/sección |
-| GET | `/api/students/:id` | Detalle + documentos |
-| POST | `/api/students` | Alta |
-| PUT | `/api/students/:id` | Modificación |
-| POST | `/api/students/:id/expedient` | Subir expediente (multipart file) |
+En producción, login y registro pueden exigir `captchaToken` de Cloudflare Turnstile si `ENABLE_TURNSTILE=true`.
 
-### Documentos (C.I, notas, etc.)
+## Roles y permisos
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/documents?studentId=&type=` | Lista |
-| POST | `/api/documents` | Subir (multipart + student, type) |
-| DELETE | `/api/documents/:id` | Eliminar |
+| Rol | Descripción |
+|-----|-------------|
+| **Administrador** | Acceso total; gestión de usuarios, macollas y pozos |
+| **Operador** | Carga de registros diarios |
+| **Supervisor** | Carga y validación de registros |
+| **Gerente** | Visualización de reportes e indicadores |
+| **Consulta** | Solo lectura |
+| **Seguridad** | Acceso acotado según configuración del front |
 
-### Pagos
+Permisos granulares definidos en `src/config/constants.js` (`OPERACIONES_CARGA`, `REPORTES_FULL`, etc.).
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/payments/config` | Configuración de periodo/monto |
-| POST | `/api/payments/config` | Crear configuración |
-| PUT | `/api/payments/config/:id` | Actualizar configuración |
-| GET | `/api/payments/cutoff` | Fechas de corte |
-| POST | `/api/payments/cutoff` | Crear fecha de corte |
-| PUT | `/api/payments/cutoff/:id` | Actualizar corte |
-| GET | `/api/payments` | Lista (studentId, cutOffId, from, to) |
-| POST | `/api/payments` | Registro de pago |
-| PUT | `/api/payments/:id` | Actualizar pago |
-| GET | `/api/payments/history/student/:id` | Historial por estudiante |
-| GET | `/api/payments/summary` | Resumen (total pagos, montos) |
-| GET | `/api/payments/solvencies` | Lista de deudores (query: period) |
+## API expuesta
 
-### Comprobantes
+Base URL: `http://localhost:4000/api`
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/api/receipts` | Subir imagen (multipart + paymentIds opcional) |
-| GET | `/api/receipts/:id` | Ver comprobante |
+### Usuarios (`/api/users`)
 
-### Notas
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/verify-username/:username` | No | Verificar si existe un correo |
+| POST | `/verify-security-answers` | No | Validar respuestas de seguridad |
+| POST | `/reset-password` | No | Restablecer contraseña |
+| GET | `/` | Admin | Listar usuarios |
+| GET | `/audit` | Admin | Bitácora de auditoría (últimos 100 registros) |
+| GET | `/:id` | Admin | Detalle de usuario |
+| POST | `/` | Admin | Crear usuario |
+| PATCH | `/:id` | Admin | Actualizar usuario (p. ej. activar cuenta) |
+| DELETE | `/:id` | Admin | Eliminar usuario |
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/grades` | Lista (studentId, year, subject) |
-| GET | `/api/grades/best` | Mejores notas (year, subject, limit) |
-| GET | `/api/grades/:id` | Una nota |
-| POST | `/api/grades` | Crear |
-| PUT | `/api/grades/:id` | Actualizar |
-| POST | `/api/grades/bulk` | Carga masiva (items[]) |
+### Macollas y pozos
 
-### Reportes y respaldo (DIRECTORA)
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/macollas` | Sí | Listar macollas con sus pozos |
+| POST | `/api/macollas` | Admin | Crear macolla |
+| PUT | `/api/macollas/:id` | Admin | Actualizar macolla |
+| DELETE | `/api/macollas/:id` | Admin | Eliminar macolla |
+| GET | `/api/pozos?macollaId=` | Sí | Listar pozos (filtro opcional por macolla) |
+| POST | `/api/pozos` | Admin | Crear pozo |
+| PUT | `/api/pozos/:id` | Admin | Actualizar pozo |
+| DELETE | `/api/pozos/:id` | Admin | Eliminar pozo |
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/reports/institutional` | Reporte institucional |
-| GET | `/api/backups` | Lista de respaldos |
-| POST | `/api/backups` | Crear respaldo |
+Estatus de pozo: `En inyección`, `En espera`, `En mantenimiento`.
 
-## Estructura
+### Registros diarios de producción (`/api/production-logs`)
+
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/` | Sí | Listar registros (incluye `vapor_total` y `calidad_promedio` calculados) |
+| POST | `/` | Operador+ | Crear registro diario |
+
+Campos principales del body en `POST`: `pozo_id`, `fecha`, `hora`, `turno`, `operador_nombre`, parámetros de generadores (`gv1_*`, `gv3_*`), niveles de tanques, `bitacora`, `horas_perdidas`, `causa_downtime`, `estatus`.
+
+## Estructura del proyecto
 
 ```
 src/
-  config/       # db, constants, upload
-  controllers/
-  middleware/   # auth, validate, errorHandler
-  models/
-  routes/
+  config/        # db (Supabase), constants, upload
+  controllers/   # Lógica de negocio por módulo
+  middleware/    # auth, validate, errorHandler
+  models/        # Constantes de tablas Supabase
+  routes/        # Definición de rutas
+  services/      # Auditoría y servicios compartidos
+  utils/
   validators/
   app.js
   server.js
 scripts/
   seed-admin.js
-uploads/        # expedients, documents, receipts (creado al subir)
+uploads/         # Archivos subidos (si aplica)
 ```
 
-## Modelos principales
+## Tablas principales (Supabase)
 
-- **User**: username, password, role, securityQuestions (recuperación).
-- **Student**: name, ci, edad, fechaNacimiento, year, section, aula, genero, enrollmentType, paymentConfig (beca, descuento, exoneración, representante), expedientUrl.
-- **PaymentConfig**: period, amountBs, amountUsd, exchangeRate.
-- **CutOffDate**: period, dueDate, amountBs, amountUsd.
-- **Payment**: student, cutOffDate, amountBs, amountUsd, paymentMethod, paidAt, receipt, exemption.
-- **Receipt**: imageUrl, payments[].
-- **Grade**: student, year, subject, corte1, corte2, corte3, average.
-- **Document**: student, type, fileUrl.
-- **Backup**: filename, path, createdBy.
+- **users** — username (email), password, full_name, role, active, security_questions
+- **macollas** — nombre, ubicacion
+- **pozos** — macolla_id, numero, estatus, ciclo_inicio, ciclo_fin, vapor_acumulado_ton
+- **registros_diarios** — parámetros operacionales, producción de vapor, bitácora, downtime
+- **audit_logs** — trazabilidad de acciones (CREATE, UPDATE, DELETE)
+
+## Módulos en código (aún no montados en `routes/index.js`)
+
+Existen controladores y rutas para inventario, clientes, dashboard, reportes PDF y steam-reports. Están preparados para integrarse, pero **no forman parte de la API activa** hasta registrarlos en `src/routes/index.js`.
+
+## Frontend
+
+El cliente web vive en `/front` (React + TanStack Router). Configura `VITE_API_BASE_URL=http://localhost:4000/api` en el `.env` del front.

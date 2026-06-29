@@ -10,5 +10,6 @@ router.use(authenticate);
 
 router.get('/', controller.list);
 router.post('/', requirePermission('OPERACIONES_CARGA'), controller.create); // Solo usuarios con permiso de carga pueden crear
+router.put('/:id', requirePermission('OPERACIONES_VALIDAR'), controller.update); // Supervisores/Administradores pueden validar/editar registros
 
 export default router;

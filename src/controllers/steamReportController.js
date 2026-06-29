@@ -59,6 +59,54 @@ export const getOne = async (req, res, next) => {
   }
 };
 
+/** Buscar el registro_diario asociado a un steam_report (por pozo+fecha+hora) */
+export const getLinkedRegistro = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { data: report, error: rErr } = await supabase.from('steam_reports').select('pozo_id, fecha, hora').eq('id', id).single();
+    if (rErr || !report) return res.status(404).json({ ok: false, message: 'Reporte no encontrado.' });
+
+    // Intento 1: coincidencia exacta pozo + fecha + hora
+    let { data: regs, error: regsErr } = await supabase
+      .from('registros_diarios')
+      .select('id')
+      .eq('pozo_id', report.pozo_id)
+      .eq('fecha', report.fecha)
+      .eq('hora', report.hora)
+      .limit(1);
+
+    if (regsErr) throw regsErr;
+
+    // Intento 2: si no hay coincidencia exacta, buscar por pozo + fecha
+    if (!regs || regs.length === 0) {
+      const r2 = await supabase.from('registros_diarios').select('id').eq('pozo_id', report.pozo_id).eq('fecha', report.fecha).limit(1);
+      regs = r2.data;
+      regsErr = r2.error;
+    }
+
+    // Intento 3: buscar por fecha + hora (ignorar pozo)
+    if ((!regs || regs.length === 0) && report.hora) {
+      const r3 = await supabase.from('registros_diarios').select('id').eq('fecha', report.fecha).eq('hora', report.hora).limit(1);
+      regs = r3.data;
+      regsErr = r3.error;
+    }
+
+    // Intento 4: buscar por fecha solamente
+    if (!regs || regs.length === 0) {
+      const r4 = await supabase.from('registros_diarios').select('id').eq('fecha', report.fecha).limit(1);
+      regs = r4.data;
+      regsErr = r4.error;
+    }
+
+    if (regsErr) throw regsErr;
+    if (!regs || regs.length === 0) return res.status(404).json({ ok: false, message: 'Registro original no encontrado.' });
+
+    res.json({ ok: true, data: regs[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
 /** Crear reporte diario (Secciones A, B y C) */
 export const create = async (req, res, next) => {
   try {
