@@ -32,9 +32,43 @@ export const getProductionReport = async (req, res, next) => {
 
     if (error) throw error;
 
-    // Cálculos de totales para el periodo
-    const totals = data.reduce((acc, curr) => {
-      acc.vaporTotal += Number(curr.vapor_producido_dia || 0);
+    // Enriquecer filas con cálculos que otros endpoints ya proveían (vapor_total, calidad_promedio)
+    // Helper: parse numeric quality values robustly (handles "85%", "85,5", etc.)
+    const parseQuality = (v) => {
+      if (v === null || v === undefined || v === '') return null;
+      const s = String(v).replace('%', '').replace(',', '.').trim();
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const enriched = (data || []).map((r) => {
+      const gv1_iny = Number(r.gv1_inyectado) || 0;
+      const gv3_iny = Number(r.gv3_inyectado) || 0;
+      const vapor_total = Number(r.vapor_total) || gv1_iny + gv3_iny;
+
+      const q1 = parseQuality(r.gv1_calidad);
+      const q3 = parseQuality(r.gv3_calidad);
+      const calidades = [q1, q3].filter((c) => c !== null && c !== undefined);
+
+      let calidad_promedio = 0;
+      if (calidades.length > 0) {
+        calidad_promedio = calidades.reduce((a, b) => Number(a) + Number(b), 0) / calidades.length;
+      } else if (r.calidad_promedio !== undefined && r.calidad_promedio !== null && r.calidad_promedio !== '') {
+        const cp = parseQuality(r.calidad_promedio);
+        calidad_promedio = cp !== null ? cp : 0;
+      }
+
+      return {
+        ...r,
+        vapor_total,
+        calidad_promedio
+      };
+    });
+
+    // Cálculos de totales para el periodo (usar registros enriquecidos)
+    const totals = enriched.reduce((acc, curr) => {
+      // Algunos reportes usan `vapor_producido_dia`, otros `vapor_total`.
+      acc.vaporTotal += Number(curr.vapor_producido_dia || curr.vapor_total || 0);
       acc.horasEfectivasTotal += Number(curr.horas_efectivas || 0);
       acc.horasPerdidasTotal += Number(curr.horas_perdidas || 0);
       return acc;
@@ -48,14 +82,14 @@ export const getProductionReport = async (req, res, next) => {
         table_name: 'steam_reports',
         record_id: null,
         old_value: null,
-        new_value: { startDate, endDate, returned: Array.isArray(data) ? data.length : 0 }
+        new_value: { startDate, endDate, returned: Array.isArray(enriched) ? enriched.length : 0 }
       });
     } catch (auditErr) {
-      // auditService ya maneja errores internamente, pero por seguridad capturamos cualquier excepción
       console.error('Error registrando auditoría de lectura:', auditErr.message || auditErr);
     }
 
-    res.json({ ok: true, data, totals });
+    // Devolver filas enriquecidas para que el cliente reciba `calidad_promedio` y `vapor_total`.
+    res.json({ ok: true, data: enriched, totals });
   } catch (err) {
     next(err);
   }
