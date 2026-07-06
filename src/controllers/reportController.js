@@ -58,19 +58,30 @@ export const getProductionReport = async (req, res, next) => {
         calidad_promedio = cp !== null ? cp : 0;
       }
 
+      // normalize horas_perdidas / horas_efectivas: if horas_efectivas is missing, derive from horas_perdidas
+      const horasPerd = Number(r.horas_perdidas || 0);
+      const horasEf = (r.horas_efectivas !== undefined && r.horas_efectivas !== null && r.horas_efectivas !== '')
+        ? Number(r.horas_efectivas)
+        : Math.max(0, 24 - horasPerd);
+
       return {
         ...r,
         vapor_total,
-        calidad_promedio
+        calidad_promedio,
+        horas_perdidas: horasPerd,
+        horas_efectivas: horasEf,
       };
     });
 
     // Cálculos de totales para el periodo (usar registros enriquecidos)
     const totals = enriched.reduce((acc, curr) => {
       // Algunos reportes usan `vapor_producido_dia`, otros `vapor_total`.
-      acc.vaporTotal += Number(curr.vapor_producido_dia || curr.vapor_total || 0);
-      acc.horasEfectivasTotal += Number(curr.horas_efectivas || 0);
-      acc.horasPerdidasTotal += Number(curr.horas_perdidas || 0);
+      const vapor = Number(curr.vapor_producido_dia || curr.vapor_total || 0);
+      const hrsEf = Number(curr.horas_efectivas || 0) || 0;
+      const hrsPer = Number(curr.horas_perdidas || 0) || 0;
+      acc.vaporTotal += vapor;
+      acc.horasEfectivasTotal += hrsEf;
+      acc.horasPerdidasTotal += hrsPer;
       return acc;
     }, { vaporTotal: 0, horasEfectivasTotal: 0, horasPerdidasTotal: 0 });
 

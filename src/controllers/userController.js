@@ -63,11 +63,17 @@ export const getOne = async (req, res, next) => {
 
 export const verifyUsername = async (req, res, next) => {
   try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, security_questions, active')
-      .ilike('username', req.params.username)
-      .single();
+    const identifier = String(req.params.username || '').trim();
+    let user;
+    let error;
+    if (identifier.includes('@')) {
+      ({ data: user, error } = await supabase.from('users').select('id, security_questions, active').ilike('email', identifier).maybeSingle());
+    } else {
+      ({ data: user, error } = await supabase.from('users').select('id, security_questions, active').ilike('username', identifier).maybeSingle());
+      if (!user) {
+        ({ data: user, error } = await supabase.from('users').select('id, security_questions, active').ilike('email', identifier).maybeSingle());
+      }
+    }
 
     if (error || !user) {
       return res.status(404).json({ ok: false, message: 'Usuario no encontrado.' });
@@ -96,13 +102,24 @@ export const verifySecurityAnswers = async (req, res, next) => {
       return res.status(404).json({ ok: false, message: 'Usuario no encontrado.' });
     }
 
-    const normalized = (s) => String(s || '').toLowerCase().trim();
-    const allMatch = req.body.answers.every(
-      (a) =>
-        user.security_questions[a.index] &&
-        normalized(user.security_questions[a.index].answer) === normalized(a.answer)
+    const answers = req.body.answers || [];
+    if (!Array.isArray(answers) || answers.length !== (user.security_questions || []).length) {
+      return res.status(401).json({ ok: false, message: 'Respuestas incorrectas.' });
+    }
+    // Compare provided answers with stored hashes using bcrypt
+    const compareResults = await Promise.all(
+      answers.map(async (a) => {
+        const stored = user.security_questions[a.index] && user.security_questions[a.index].answer;
+        if (!stored) return false;
+        try {
+          return await bcrypt.compare(String(a.answer || ''), String(stored));
+        } catch (e) {
+          return false;
+        }
+      })
     );
-    if (!allMatch || req.body.answers.length !== user.security_questions.length) {
+    const allMatch = compareResults.every(Boolean);
+    if (!allMatch) {
       return res.status(401).json({ ok: false, message: 'Respuestas incorrectas.' });
     }
     const resetToken = jwt.sign(
@@ -242,6 +259,24 @@ export const update = async (req, res, next) => {
       oldValuesForLog.role = user.role;
       newValuesForLog.role = req.body.role;
     }
+    // Email change: normalize and check duplicates
+    if (req.body.email !== undefined && String(req.body.email).trim() !== String(user.email || '').trim()) {
+      const normalizedEmail = String(req.body.email).toLowerCase().trim();
+      // Validate basic email format
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(normalizedEmail)) {
+        return res.status(400).json({ ok: false, message: 'Formato de correo inválido.' });
+      }
+      // Check duplicates
+      const { data: existing, error: existingErr } = await supabase.from('users').select('id').ilike('email', normalizedEmail).maybeSingle();
+      if (existingErr) throw existingErr;
+      if (existing && String(existing.id) !== String(user.id)) {
+        return res.status(400).json({ ok: false, message: 'El correo electrónico ya está en uso por otro usuario.' });
+      }
+      updateData.email = normalizedEmail;
+      oldValuesForLog.email = user.email;
+      newValuesForLog.email = normalizedEmail;
+    }
     if (req.body.active !== undefined && user.active !== req.body.active) {
       updateData.active = req.body.active;
       oldValuesForLog.active = user.active;
@@ -251,6 +286,50 @@ export const update = async (req, res, next) => {
       updateData.full_name = req.body.full_name;
       oldValuesForLog.full_name = user.full_name;
       newValuesForLog.full_name = req.body.full_name;
+    }
+
+    // Username change: normalize to lowercase and record for audit
+    if (req.body.username !== undefined && String(req.body.username).trim() !== String(user.username).trim()) {
+      const normalizedUsername = String(req.body.username).toLowerCase().trim();
+      updateData.username = normalizedUsername;
+      oldValuesForLog.username = user.username;
+      newValuesForLog.username = normalizedUsername;
+    }
+
+    // Security questions change (requires current password when user edits their own profile)
+    if (req.body.security_questions !== undefined) {
+      const questions = req.body.security_questions;
+      if (!Array.isArray(questions) || questions.length !== 2) {
+        return res.status(400).json({ ok: false, message: 'Se requieren exactamente 2 preguntas de seguridad.' });
+      }
+
+      // If the requester is the same user (self-update), require currentPassword
+      const requesterId = String(req.user?.id || req.user?.userId);
+      const targetId = String(req.params.id);
+      if (requesterId === targetId) {
+        const currentPassword = String(req.body.currentPassword || '');
+        if (!currentPassword) return res.status(400).json({ ok: false, message: 'Contraseña actual requerida para cambiar preguntas de seguridad.' });
+        const validPwd = await bcrypt.compare(currentPassword, user.password);
+        if (!validPwd) return res.status(401).json({ ok: false, message: 'Contraseña actual incorrecta.' });
+      }
+
+      // Validate structure and hash answers
+      const hashed = [];
+      for (const q of questions) {
+        if (!q || typeof q.question !== 'string' || !q.question.trim()) {
+          return res.status(400).json({ ok: false, message: 'Pregunta inválida.' });
+        }
+        if (!q.answer || !String(q.answer).trim()) {
+          return res.status(400).json({ ok: false, message: 'Respuesta inválida.' });
+        }
+        const h = await bcrypt.hash(String(q.answer).trim(), 12);
+        hashed.push({ question: q.question.trim(), answer: h });
+      }
+
+      updateData.security_questions = hashed;
+      // Invalidate any reset tokens
+      updateData.reset_token = null;
+      // Do NOT add security_questions to audit log per request
     }
 
     const { password } = req.body;

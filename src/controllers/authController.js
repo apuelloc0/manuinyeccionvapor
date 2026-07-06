@@ -37,72 +37,79 @@ const isValidEmail = (email) => {
  */
 export const register = async (req, res, next) => {
   try {
-    const { username, password, full_name, security_questions, captchaToken } = req.body;
-
-    const normalizedEmail = String(username || '').toLowerCase().trim();
+    const { username, email, password, full_name, security_questions, captchaToken } = req.body;
 
     // Validación de Bot en producción
-    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_TURNSTILE === 'true') { // <-- CAMBIO AQUÍ
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_TURNSTILE === 'true') {
       const isHuman = await verifyBotProtection(captchaToken);
       if (!isHuman) return res.status(400).json({ ok: false, message: 'Fallo en verificación de seguridad. Intente de nuevo.' });
     }
 
-    if (!isValidEmail(normalizedEmail)) {
+    const normalizedUsername = username ? String(username).toLowerCase().trim() : '';
+    const normalizedEmail = email ? String(email).toLowerCase().trim() : '';
+
+    if (!normalizedUsername && !normalizedEmail) {
+      return res.status(400).json({ ok: false, message: 'Se requiere nombre de usuario o correo electrónico.' });
+    }
+
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
       return res.status(400).json({ ok: false, message: 'El correo electrónico no tiene un formato válido.' });
     }
 
-    // Verificar si el usuario ya existe
+    // Verificar si ya existe usuario con ese username o email
+    const orFilterParts = [];
+    if (normalizedUsername) orFilterParts.push(`username.eq.${normalizedUsername}`);
+    if (normalizedEmail) orFilterParts.push(`email.eq.${normalizedEmail}`);
+    const orFilter = orFilterParts.join(',');
+
     const { data: existingUser, error: existingUserError } = await supabase
       .from('users')
       .select('id')
-      .eq('username', normalizedEmail)
+      .or(orFilter)
       .maybeSingle();
 
     if (existingUserError) throw existingUserError;
     if (existingUser) {
-      return res.status(400).json({ ok: false, message: 'Ya existe un usuario con este correo electrónico.' });
+      return res.status(400).json({ ok: false, message: 'Ya existe una cuenta con ese usuario o correo electrónico.' });
     }
 
     // Hash de la contraseña
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // Determinar el rol inicial. Por defecto, OPERADOR.
-    // Si es el primer usuario en el sistema, se le asigna ADMINISTRADOR.
     const { count: userCount } = await supabase.from('users').select('id', { count: 'exact', head: true });
     const assignedRole = userCount === 0 ? ROLES.ADMINISTRADOR : ROLES.OPERADOR;
 
     // Crear el Usuario
+    const insertData = {
+      username: normalizedUsername || null,
+      email: normalizedEmail || null,
+      full_name,
+      password: hashedPassword,
+      role: assignedRole,
+      active: userCount === 0,
+      security_questions
+    };
+
     const { data: user, error: userError } = await supabase
       .from('users')
-      .insert([{
-        username: normalizedEmail,
-        full_name,
-        password: hashedPassword,
-        role: assignedRole,
-        active: userCount === 0, // El primer usuario (Admin) se activa automáticamente, los demás requieren aprobación
-        security_questions // Guardamos las preguntas de seguridad
-      }])
+      .insert([insertData])
       .select()
       .single();
 
     if (userError) {
       if (userError.code === '23505') {
-        return res.status(400).json({ ok: false, message: 'Ya existe una cuenta asociada a este correo electrónico.' });
+        return res.status(400).json({ ok: false, message: 'Ya existe una cuenta asociada a este correo electrónico o usuario.' });
       }
       console.error('❌ [AUTH_REGISTER_ERROR]:', userError.message);
       throw userError;
     }
 
-    // Si userCount era 0 antes de este insert, significa que este es el primer Admin.
-    // Para todos los demás (userCount > 0), el mensaje indica que requieren aprobación.
     const successMessage = userCount === 0 
       ? `Cuenta de ${assignedRole} creada y activada automáticamente.` 
       : `Registro exitoso. Tu cuenta como ${assignedRole} está pendiente de aprobación por el administrador.`;
 
-    res.status(201).json({ 
-      ok: true, 
-      message: successMessage
-    });
+    res.status(201).json({ ok: true, message: successMessage });
   } catch (err) {
     next(err);
   }
@@ -113,20 +120,20 @@ export const register = async (req, res, next) => {
  */
 export const login = async (req, res, next) => {
   try {
-    const { username, password, captchaToken } = req.body;
+    const { username, email, password, captchaToken } = req.body;
 
-    const normalizedEmail = String(username || '').toLowerCase().trim();
+    const identifier = String(username || email || '').toLowerCase().trim();
 
-    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_TURNSTILE === 'true') { // <-- CAMBIO AQUÍ
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_TURNSTILE === 'true') {
       const isHuman = await verifyBotProtection(captchaToken);
       if (!isHuman) return res.status(400).json({ ok: false, message: 'Seguridad: Por favor verifique que no es un robot.' });
     }
 
-    // 1. Buscar usuario (con email normalizado) sin joins a workshops
+    // 1. Buscar usuario por username o email
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
-      .eq('username', normalizedEmail)
+      .or(`username.eq.${identifier},email.eq.${identifier}`)
       .single();
 
     if (error || !user) {
@@ -159,7 +166,7 @@ export const login = async (req, res, next) => {
       { expiresIn: '24h' }
     );
 
-    res.json({ ok: true, token, user: { id: user.id, username: user.username, role: userRole, full_name: user.full_name } });
+    res.json({ ok: true, token, user: { id: user.id, username: user.username, email: user.email || null, role: userRole, full_name: user.full_name, active: user.active } });
   } catch (err) {
     next(err);
   }
