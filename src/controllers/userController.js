@@ -197,6 +197,7 @@ export const create = async (req, res, next) => {
 
 export const update = async (req, res, next) => {
   try {
+    console.log('🔧 [USER_UPDATE_REQUEST]', { userId: req.user?.id, paramsId: req.params.id, body: req.body });
     const adminId = req.user?.id || req.user?.userId;
     const requesterRole = String(req.user?.role || '').toUpperCase();
 
@@ -351,6 +352,11 @@ export const update = async (req, res, next) => {
       .eq('id', req.params.id)
       .select()
       .single(); // Usamos single porque esperamos un resultado
+
+    console.log('🔧 [USER_UPDATE_DEBUG] updateData:', updateData);
+    console.log('🔧 [USER_UPDATE_DEBUG] oldValuesForLog:', oldValuesForLog);
+    console.log('🔧 [USER_UPDATE_DEBUG] newValuesForLog:', newValuesForLog);
+    console.log('🔧 [USER_UPDATE_DEBUG] db result:', { updated, updateError });
 
     if (updateError) {
       console.error('❌ [USER_UPDATE_DB_ERROR]:', updateError);
