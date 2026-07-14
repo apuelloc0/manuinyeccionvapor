@@ -1,6 +1,8 @@
 import supabase from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import axios from 'axios';
+import crypto from 'crypto';
 import { ROLES } from '../config/constants.js';
 import { logActivity } from '../services/auditService.js';
 
@@ -71,6 +73,26 @@ export const register = async (req, res, next) => {
     if (existingUserError) throw existingUserError;
     if (existingUser) {
       return res.status(400).json({ ok: false, message: 'Ya existe una cuenta con ese usuario o correo electrónico.' });
+    }
+
+    // Check if password was exposed in public breaches (HaveIBeenPwned)
+    const isPwned = async (pwd) => {
+      try {
+        const sha1 = crypto.createHash('sha1').update(pwd).digest('hex').toUpperCase();
+        const prefix = sha1.slice(0,5);
+        const suffix = sha1.slice(5);
+        const resp = await axios.get(`https://api.pwnedpasswords.com/range/${prefix}`);
+        const lines = String(resp.data).split('\n');
+        return lines.some(line => line.split(':')[0] === suffix);
+      } catch (e) {
+        console.error('[HIBP] error checking password', e?.message || e);
+        return false; // on error, do not block registration
+      }
+    };
+
+    // If password appears in breaches, reject with clear message
+    if (password && await isPwned(password)) {
+      return res.status(400).json({ ok: false, message: 'La contraseña suministrada aparece en filtraciones públicas. Elige una contraseña más segura.' });
     }
 
     // Hash de la contraseña
@@ -166,7 +188,26 @@ export const login = async (req, res, next) => {
       { expiresIn: '24h' }
     );
 
-    res.json({ ok: true, token, user: { id: user.id, username: user.username, email: user.email || null, role: userRole, full_name: user.full_name, active: user.active } });
+    // Check password against HIBP and include a warning if found
+    let warning = null;
+    try {
+      const sha1 = crypto.createHash('sha1').update(password).digest('hex').toUpperCase();
+      const prefix = sha1.slice(0,5);
+      const suffix = sha1.slice(5);
+      const resp = await axios.get(`https://api.pwnedpasswords.com/range/${prefix}`);
+      const lines = String(resp.data).split('\n');
+      const found = lines.some(line => line.split(':')[0] === suffix);
+      if (found) warning = 'La contraseña utilizada ha aparecido en filtraciones públicas. Cambia tu contraseña.';
+    } catch (e) {
+      // ignore hibp errors on login
+      console.error('[HIBP] login check failed', e?.message || e);
+    }
+
+    const payload = { id: user.id, username: user.username, email: user.email || null, role: userRole, full_name: user.full_name, active: user.active };
+    const responseBody = { ok: true, token, user: payload };
+    if (warning) responseBody.warning = warning;
+
+    res.json(responseBody);
   } catch (err) {
     next(err);
   }

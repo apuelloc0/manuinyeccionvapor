@@ -61,7 +61,7 @@ export const updateMacolla = async (req, res, next) => {
 
     const { data, error } = await supabase
       .from('macollas')
-      .update({ nombre, ubicacion, updated_at: new Date().toISOString() }) // Añadimos updated_at
+      .update({ nombre, ubicacion, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single();
@@ -178,11 +178,15 @@ export const createPozo = async (req, res, next) => {
 export const updatePozo = async (req, res, next) => {
   try {
     const { id } = req.params;
+    // DEBUG: log incoming update for easier troubleshooting
+    console.log('PUT /pozos/:id - updatePozo called', { id, body: req.body, user: req.user?.id });
 
     const { data: current } = await supabase.from('pozos').select('*').eq('id', id).single();
 
     const { macolla_id, numero, estatus, ciclo_inicio, ciclo_fin } = req.body;
-    const updates = { updated_at: new Date().toISOString() }; // Añadimos updated_at
+    const updates = {};
+    // set updated_at for audit purposes (column exists in DB)
+    updates.updated_at = new Date().toISOString();
 
     if (macolla_id !== undefined) updates.macolla_id = macolla_id;
     if (numero !== undefined) updates.numero = numero;
