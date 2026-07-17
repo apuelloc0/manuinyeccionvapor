@@ -86,18 +86,42 @@ export const create = async (req, res, next) => {
       tk3_nivel,
       gv1_presion,
       gv1_temp,
+      gv1_pres_qnt: req.body.gv1_pres_qnt ?? null,
       gv1_calidad,
+      gv1_calidad_seteada: req.body.gv1_calidad_seteada ?? null,
+      gv1_calidad_equipo: req.body.gv1_calidad_equipo ?? null,
+      gv1_cld_cond: req.body.gv1_cld_cond ?? null,
+      gv1_pres_gas_sist: req.body.gv1_pres_gas_sist ?? null,
+      gv1_pres_gas_gv: req.body.gv1_pres_gas_gv ?? null,
+      gv1_consumo_gas: req.body.gv1_consumo_gas ?? null,
+      gv1_ph_entrada: req.body.gv1_ph_entrada ?? null,
+      gv1_ph_salida: req.body.gv1_ph_salida ?? null,
       gv1_flujo_agua,
       gv1_flujo_gas,
       gv1_inyectado,
       gv3_presion,
       gv3_temp,
+      gv3_pres_qnt: req.body.gv3_pres_qnt ?? null,
       gv3_calidad,
+      gv3_calidad_seteada: req.body.gv3_calidad_seteada ?? null,
+      gv3_calidad_equipo: req.body.gv3_calidad_equipo ?? null,
+      gv3_cld_cond: req.body.gv3_cld_cond ?? null,
+      gv3_pres_gas_sist: req.body.gv3_pres_gas_sist ?? null,
+      gv3_pres_gas_gv: req.body.gv3_pres_gas_gv ?? null,
+      gv3_consumo_gas: req.body.gv3_consumo_gas ?? null,
+      gv3_ph_entrada: req.body.gv3_ph_entrada ?? null,
+      gv3_ph_salida: req.body.gv3_ph_salida ?? null,
       gv3_flujo_agua,
       gv3_flujo_gas,
       gv3_inyectado,
       ph_alimentacion,
       ph_retorno,
+      op1_vapor_12h: req.body.op1_vapor_12h ?? null,
+      op1_total_inyectado_acum: req.body.op1_total_inyectado_acum ?? null,
+      op3_vapor_12h: req.body.op3_vapor_12h ?? null,
+      op3_total_inyectado_acum: req.body.op3_total_inyectado_acum ?? null,
+      total_inyectado_ambos: req.body.total_inyectado_ambos ?? null,
+      tiempo_inyeccion_dias: req.body.tiempo_inyeccion_dias ?? null,
       bitacora,
       horas_perdidas,
       causa_downtime,
@@ -194,8 +218,9 @@ export const update = async (req, res, next) => {
     // Restringir qué campos pueden actualizarse si se desea (por ahora permitimos la mayoría)
     const allowedFields = [
       'titulo','fecha','hora','turno','operador_nombre','presion_cabezal','temp_cabezal','pres_rev_prod','temp_rev_prod','pres_rev_sup','temp_rev_sup','elongacion',
-      'tk1_nivel','tk2_nivel','tk3_nivel','gv1_presion','gv1_temp','gv1_calidad','gv1_flujo_agua','gv1_flujo_gas','gv1_inyectado',
-      'gv3_presion','gv3_temp','gv3_calidad','gv3_flujo_agua','gv3_flujo_gas','gv3_inyectado','ph_alimentacion','ph_retorno',
+      'tk1_nivel','tk2_nivel','tk3_nivel','gv1_presion','gv1_temp','gv1_pres_qnt','gv1_calidad','gv1_calidad_seteada','gv1_calidad_equipo','gv1_cld_cond','gv1_pres_gas_sist','gv1_pres_gas_gv','gv1_consumo_gas','gv1_flujo_agua','gv1_flujo_gas','gv1_inyectado','gv1_ph_entrada','gv1_ph_salida',
+      'gv3_presion','gv3_temp','gv3_pres_qnt','gv3_calidad','gv3_calidad_seteada','gv3_calidad_equipo','gv3_cld_cond','gv3_pres_gas_sist','gv3_pres_gas_gv','gv3_consumo_gas','gv3_flujo_agua','gv3_flujo_gas','gv3_inyectado','gv3_ph_entrada','gv3_ph_salida','ph_alimentacion','ph_retorno',
+      'op1_vapor_12h','op1_total_inyectado_acum','op3_vapor_12h','op3_total_inyectado_acum','total_inyectado_ambos','tiempo_inyeccion_dias',
       'bitacora','horas_perdidas','causa_downtime','estatus','pozo_id'
     ];
 
@@ -203,6 +228,12 @@ export const update = async (req, res, next) => {
     for (const k of Object.keys(payload || {})) {
       if (allowedFields.includes(k)) updateData[k] = payload[k];
     }
+
+    // Debug: log incoming payload keys and the computed updateData
+    try {
+      console.log('ℹ️ [PRODUCTION_LOGS_UPDATE] payload keys=', Object.keys(payload || {}));
+      console.log('ℹ️ [PRODUCTION_LOGS_UPDATE] allowed update keys=', Object.keys(updateData));
+    } catch (e) {}
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ ok: false, message: 'No hay campos válidos para actualizar.' });
