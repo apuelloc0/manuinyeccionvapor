@@ -94,6 +94,10 @@ export const create = async (req, res, next) => {
       gv1_temp_vapor: req.body.gv1_temp_vapor ?? null,
       gv1_temp_tubo: req.body.gv1_temp_tubo ?? null,
       gv1_temp_chimenea: req.body.gv1_temp_chimenea ?? null,
+        gv1_cloruro: req.body.gv1_cloruro ?? null,
+        gv1_tds: req.body.gv1_tds ?? null,
+        gv1_dureza: req.body.gv1_dureza ?? null,
+        gv1_o2: req.body.gv1_o2 ?? null,
         gv1_calidad,
         gv1_calidad_seteada: req.body.gv1_calidad_seteada ?? null,
         gv1_calidad_equipo: req.body.gv1_calidad_equipo ?? null,
@@ -116,6 +120,10 @@ export const create = async (req, res, next) => {
       gv3_temp_vapor: req.body.gv3_temp_vapor ?? null,
       gv3_temp_tubo: req.body.gv3_temp_tubo ?? null,
       gv3_temp_chimenea: req.body.gv3_temp_chimenea ?? null,
+      gv3_cloruro: req.body.gv3_cloruro ?? null,
+      gv3_tds: req.body.gv3_tds ?? null,
+      gv3_dureza: req.body.gv3_dureza ?? null,
+      gv3_o2: req.body.gv3_o2 ?? null,
       gv3_calidad,
       gv3_calidad_seteada: req.body.gv3_calidad_seteada ?? null,
       gv3_calidad_equipo: req.body.gv3_calidad_equipo ?? null,
@@ -235,8 +243,10 @@ export const update = async (req, res, next) => {
       'tk1_nivel','tk2_nivel','tk3_nivel',
       // GV1
       'gv1_presion','gv1_temp','gv1_pres_qnt','gv1_pres_pi_vc','gv1_pres_pit_vc','gv1_temp_ti_vc','gv1_pres_vapor','gv1_temp_vapor','gv1_temp_tubo','gv1_temp_chimenea','gv1_calidad','gv1_calidad_seteada','gv1_calidad_equipo','gv1_cld_cond','gv1_pres_gas_sist','gv1_pres_gas_gv','gv1_consumo_gas','gv1_ph_entrada','gv1_ph_salida','gv1_flujo_agua','gv1_flujo_gas','gv1_inyectado',
+      'gv1_cloruro','gv1_tds','gv1_dureza','gv1_o2',
       // GV3
       'gv3_presion','gv3_temp','gv3_pres_qnt','gv3_pres_pi_vc','gv3_pres_pit_vc','gv3_temp_ti_vc','gv3_pres_vapor','gv3_temp_vapor','gv3_temp_tubo','gv3_temp_chimenea','gv3_calidad','gv3_calidad_seteada','gv3_calidad_equipo','gv3_cld_cond','gv3_pres_gas_sist','gv3_pres_gas_gv','gv3_consumo_gas','gv3_ph_entrada','gv3_ph_salida','gv3_flujo_agua','gv3_flujo_gas','gv3_inyectado',
+      'gv3_cloruro','gv3_tds','gv3_dureza','gv3_o2',
       // PH
       'ph_alimentacion','ph_retorno',
       // OP fields
