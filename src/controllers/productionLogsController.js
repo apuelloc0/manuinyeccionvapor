@@ -81,6 +81,8 @@ export const create = async (req, res, next) => {
       pres_rev_sup,
       temp_rev_sup,
       elongacion,
+      elongacion_raw,
+      elongacion_raw: req.body.elongacion_raw ?? null,
       tk1_nivel,
       tk2_nivel,
       tk3_nivel,
@@ -240,6 +242,7 @@ export const update = async (req, res, next) => {
     // Restringir qué campos pueden actualizarse si se desea (por ahora permitimos la mayoría)
     const allowedFields = [
       'titulo','fecha','hora','turno','operador_nombre','presion_cabezal','temp_cabezal','pres_rev_prod','temp_rev_prod','pres_rev_sup','temp_rev_sup','elongacion',
+      'elongacion_raw',
       'tk1_nivel','tk2_nivel','tk3_nivel',
       // GV1
       'gv1_presion','gv1_temp','gv1_pres_qnt','gv1_pres_pi_vc','gv1_pres_pit_vc','gv1_temp_ti_vc','gv1_pres_vapor','gv1_temp_vapor','gv1_temp_tubo','gv1_temp_chimenea','gv1_calidad','gv1_calidad_seteada','gv1_calidad_equipo','gv1_cld_cond','gv1_pres_gas_sist','gv1_pres_gas_gv','gv1_consumo_gas','gv1_ph_entrada','gv1_ph_salida','gv1_flujo_agua','gv1_flujo_gas','gv1_inyectado',
