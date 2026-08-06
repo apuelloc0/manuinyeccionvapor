@@ -81,7 +81,6 @@ export const create = async (req, res, next) => {
       pres_rev_sup,
       temp_rev_sup,
       elongacion,
-      elongacion_raw,
       elongacion_raw: req.body.elongacion_raw ?? null,
       tk1_nivel,
       tk2_nivel,
