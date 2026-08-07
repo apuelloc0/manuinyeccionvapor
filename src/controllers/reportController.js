@@ -66,8 +66,10 @@ export const getProductionReport = async (req, res, next) => {
 
       return {
         ...r,
+        // normalize and provide both legacy and new field names used by frontend
         vapor_total,
-        calidad_promedio,
+        vapor_producido_dia: Number(r.vapor_producido_dia ?? vapor_total) || 0,
+        calidad_promedio: Number(calidad_promedio) || 0,
         horas_perdidas: horasPerd,
         horas_efectivas: horasEf,
       };
