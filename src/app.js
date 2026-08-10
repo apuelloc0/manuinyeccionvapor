@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -6,6 +8,13 @@ import authRoutes from './routes/authRoutes.js';
 import apiRoutes from './routes/index.js'; // Importamos el router principal
 
 const app = express();
+
+// Serve static assets from back/public so endpoints like
+// `/template/encabezado.PNG` are available in production (Render is case-sensitive)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, '..', 'public');
+app.use(express.static(publicDir));
 
 // Si el servidor está detrás de un proxy (nginx, cloudflare), confía en el proxy
 app.set('trust proxy', 1);
