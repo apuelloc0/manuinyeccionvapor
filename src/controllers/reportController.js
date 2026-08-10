@@ -1,5 +1,7 @@
 import supabase from '../config/db.js';
 import { logActivity } from '../services/auditService.js';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Genera un resumen estadístico de inyección para un rango de fechas.
@@ -113,6 +115,7 @@ import PDFDocument from 'pdfkit';
 
 export const exportProductionPdf = async (req, res, next) => {
   try {
+    console.log('exportProductionPdf called, auth disabled test value:', process.env.DISABLE_AUTH_FOR_TEST);
     const startDate = req.query.startDate || req.query.start;
     const endDate = req.query.endDate || req.query.end;
     const { pozoId } = req.query;
@@ -137,6 +140,8 @@ export const exportProductionPdf = async (req, res, next) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const buffers = [];
     doc.on('data', (chunk) => buffers.push(chunk));
+
+    
     doc.on('end', async () => {
       const pdfData = Buffer.concat(buffers);
       // Auditoría: registrar export
@@ -152,16 +157,76 @@ export const exportProductionPdf = async (req, res, next) => {
         console.error('Error registrando auditoría de export PDF:', aErr.message || aErr);
       }
 
+      // Añadir cabeceras de depuración indicando si se encontró el encabezado
+      try {
+        if (resolvedHeaderPath) {
+          res.setHeader('X-Encabezado-Found', 'true');
+          res.setHeader('X-Encabezado-Path', resolvedHeaderPath);
+          console.log('Usando encabezado de archivo (detectado al final):', resolvedHeaderPath);
+        } else {
+          res.setHeader('X-Encabezado-Found', 'false');
+          res.setHeader('X-Encabezado-Path', 'none');
+          console.log('No se encontró imagen de encabezado (detectado al final)');
+        }
+      } catch (hdrErr) {
+        console.warn('No se pudieron establecer cabeceras de depuración:', hdrErr?.message || hdrErr);
+      }
+
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=Reporte_Inyeccion_${startDate}_al_${endDate}.pdf`);
       res.send(pdfData);
     });
 
-    // Header
-    doc.fontSize(18).text('Reporte de Inyección de Vapor', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(10).text(`Periodo: ${startDate} - ${endDate}`, { align: 'center' });
-    doc.moveDown(1);
+    // Header: preferir imagen corporativa si existe, en cada página
+    const headerCandidates = [
+      path.join(process.cwd(), 'public', 'templates', 'encabezado.png'),
+      path.join(process.cwd(), 'public', 'template', 'encabezado.png'),
+      path.join(process.cwd(), 'public', 'templates', 'encabezado.PNG'),
+      path.join(process.cwd(), 'public', 'template', 'encabezado.PNG'),
+      path.join(process.cwd(), 'public', 'templates', 'encabezado.jpg'),
+      path.join(process.cwd(), 'public', 'template', 'encabezado.jpg'),
+      path.join(process.cwd(), 'public', 'templates', 'encabezado.jpeg'),
+      path.join(process.cwd(), 'public', 'template', 'encabezado.jpeg')
+    ];
+
+    const findHeaderPath = () => {
+      for (const p of headerCandidates) {
+        try {
+          if (fs.existsSync(p)) return p;
+        } catch (e) {
+          // ignore
+        }
+      }
+      return null;
+    };
+
+    const resolvedHeaderPath = findHeaderPath();
+
+    const drawHeaderImage = (imagePath) => {
+      try {
+        const maxWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+        // Fit the image to the available page width and allow a taller header (140pt)
+        // so the logo and text are visible. `fit` preserves aspect ratio.
+        const imgOpts = { fit: [maxWidth, 140], align: 'center' };
+        doc.image(imagePath, doc.page.margins.left, doc.page.margins.top - 10, imgOpts);
+        doc.moveDown(1.5);
+      } catch (e) {
+        console.error('No se pudo renderizar imagen de encabezado en PDF:', e.message || e);
+      }
+    };
+
+    if (resolvedHeaderPath) {
+      drawHeaderImage(resolvedHeaderPath);
+      doc.on('pageAdded', () => {
+        drawHeaderImage(resolvedHeaderPath);
+      });
+    } else {
+      // Fallback textual si no hay imagen disponible
+      doc.fontSize(18).text('Reporte de Inyección de Vapor', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(10).text(`Periodo: ${startDate} - ${endDate}`, { align: 'center' });
+      doc.moveDown(1);
+    }
 
     // Detalle por reporte (bloques para facilitar lectura)
     doc.fontSize(11);

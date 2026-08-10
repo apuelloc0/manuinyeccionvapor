@@ -5,19 +5,23 @@ import { ROLES } from '../config/constants.js';
 
 const router = Router();
 
-// Todas las rutas de macollas y pozos requieren autenticación
-router.use(authenticate);
+// Debug: log when this router receives a request
+router.use((req, res, next) => {
+	console.log('macollaPozoRoutes middleware - received path:', req.path);
+	next();
+});
 
+// Autenticación aplicada por ruta para no interceptar rutas no relacionadas
 // Rutas para Macollas
-router.get('/macollas', controller.listMacollas);
-router.post('/macollas', requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.createMacolla);
-router.put('/macollas/:id', requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.updateMacolla);
-router.delete('/macollas/:id', requireRole(ROLES.ADMINISTRADOR), controller.removeMacolla);
+router.get('/macollas', authenticate, controller.listMacollas);
+router.post('/macollas', authenticate, requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.createMacolla);
+router.put('/macollas/:id', authenticate, requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.updateMacolla);
+router.delete('/macollas/:id', authenticate, requireRole(ROLES.ADMINISTRADOR), controller.removeMacolla);
 
 // Rutas para Pozos
-router.get('/pozos', controller.listPozos);
-router.post('/pozos', requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.createPozo);
-router.put('/pozos/:id', requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.updatePozo);
-router.delete('/pozos/:id', requireRole(ROLES.ADMINISTRADOR), controller.removePozo);
+router.get('/pozos', authenticate, controller.listPozos);
+router.post('/pozos', authenticate, requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.createPozo);
+router.put('/pozos/:id', authenticate, requireRole(ROLES.ADMINISTRADOR, ROLES.SUPERVISOR), controller.updatePozo);
+router.delete('/pozos/:id', authenticate, requireRole(ROLES.ADMINISTRADOR), controller.removePozo);
 
 export default router;

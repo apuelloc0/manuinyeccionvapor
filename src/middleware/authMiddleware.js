@@ -3,6 +3,7 @@ import supabase from '../config/db.js';
 
 export const authMiddleware = async (req, res, next) => {
   try {
+    console.log('authMiddleware invoked for path:', req.path);
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
       return res.status(401).json({ ok: false, message: 'No token provided.' });

@@ -11,6 +11,13 @@ router.get('/production', authMiddleware, controller.getProductionReport);
 router.get('/production-report', authMiddleware, controller.getProductionReport);
 
 // Export PDF for a date range
-router.get('/production/export/pdf', authMiddleware, controller.exportProductionPdf);
+// Export PDF for a date range
+// En entornos de prueba locales puede ser útil desactivar autenticación para validar generación de PDF.
+if (process.env.DISABLE_AUTH_FOR_TEST === 'true') {
+	console.warn('WARNING: Auth disabled for report export (DISABLE_AUTH_FOR_TEST=true)');
+	router.get('/production/export/pdf', controller.exportProductionPdf);
+} else {
+	router.get('/production/export/pdf', authMiddleware, controller.exportProductionPdf);
+}
 
 export default router;

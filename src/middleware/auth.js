@@ -5,6 +5,7 @@ import { USERS_TABLE } from '../models/User.js';
 
 export const authenticate = async (req, res, next) => {
   try {
+    console.log('authenticate middleware invoked for path:', req.path);
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) {
