@@ -27,26 +27,10 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Serve static assets from back/public after CORS middleware so static files
-// include the CORS headers. This avoids browser CORS errors when the frontend
-// (possibly served from a different origin) requests these assets.
-app.use(express.static(publicDir));
-
-// Provide explicit aliases for common header paths (some clients request
-// `/templates/encabezado.PNG` or `/template/encabezado.png` with different
-// casing). Serve the canonical `public/template/encabezado.png` file for
-// these routes to avoid 404s.
-const sendEncabezado = (req, res) => {
-  const filePath = path.join(publicDir, 'template', 'encabezado.png');
-  return res.sendFile(filePath, (err) => {
-    if (err) {
-      console.warn('Could not send encabezado file:', err);
-      res.status(err.status || 404).end();
-    }
-  });
-};
-
-app.get(['/templates/encabezado.PNG', '/templates/encabezado.png', '/template/encabezado.PNG', '/template/encabezado.png'], sendEncabezado);
+// Note: static assets for UI are served by the frontend build.
+// The backend no longer serves the `/template` header asset to avoid
+// duplication and possible cross-origin issues. Frontend should include
+// `encabezado.png` in its `front/src/assets` so it is available in production.
 
 // ========== Rate limiting ==========
 // Limiter para rutas de autenticación (protege contra fuerza bruta)
