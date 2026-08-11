@@ -9,12 +9,9 @@ import apiRoutes from './routes/index.js'; // Importamos el router principal
 
 const app = express();
 
-// Serve static assets from back/public so endpoints like
-// `/template/encabezado.PNG` are available in production (Render is case-sensitive)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, '..', 'public');
-app.use(express.static(publicDir));
 
 // Si el servidor está detrás de un proxy (nginx, cloudflare), confía en el proxy
 app.set('trust proxy', 1);
@@ -29,6 +26,27 @@ app.use((req, res, next) => {
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+// Serve static assets from back/public after CORS middleware so static files
+// include the CORS headers. This avoids browser CORS errors when the frontend
+// (possibly served from a different origin) requests these assets.
+app.use(express.static(publicDir));
+
+// Provide explicit aliases for common header paths (some clients request
+// `/templates/encabezado.PNG` or `/template/encabezado.png` with different
+// casing). Serve the canonical `public/template/encabezado.png` file for
+// these routes to avoid 404s.
+const sendEncabezado = (req, res) => {
+  const filePath = path.join(publicDir, 'template', 'encabezado.png');
+  return res.sendFile(filePath, (err) => {
+    if (err) {
+      console.warn('Could not send encabezado file:', err);
+      res.status(err.status || 404).end();
+    }
+  });
+};
+
+app.get(['/templates/encabezado.PNG', '/templates/encabezado.png', '/template/encabezado.PNG', '/template/encabezado.png'], sendEncabezado);
 
 // ========== Rate limiting ==========
 // Limiter para rutas de autenticación (protege contra fuerza bruta)
