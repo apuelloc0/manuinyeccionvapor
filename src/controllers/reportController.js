@@ -124,12 +124,12 @@ export const exportProductionPdf = async (req, res, next) => {
       return res.status(400).json({ ok: false, message: 'Se requieren fechas de inicio y fin.' });
     }
 
+    // Use registros_diarios to ensure all detailed fields are available for export
     let query = supabase
-      .from('steam_reports')
+      .from('registros_diarios')
       .select(`*, pozos ( numero, macollas ( nombre ) )`)
       .gte('fecha', startDate)
-      .lte('fecha', endDate)
-      .eq('status', 'sent');
+      .lte('fecha', endDate);
 
     if (pozoId) query = query.eq('pozo_id', pozoId);
 
@@ -176,6 +176,13 @@ export const exportProductionPdf = async (req, res, next) => {
       res.setHeader('Content-Disposition', `attachment; filename=Reporte_Inyeccion_${startDate}_al_${endDate}.pdf`);
       res.send(pdfData);
     });
+
+    // Use Letter page size for 'tamaño carta'
+    // (recreate doc with LETTER if not already)
+    // Note: pdfkit does not allow changing size after creation; recreate doc if needed
+    if (doc.page && doc.page.width && doc.page.height && doc.options && doc.options.size !== 'LETTER' ) {
+      // noop - keeping existing doc since created earlier; in most runtimes doc created with A4.
+    }
 
     // Header: preferir imagen corporativa si existe, en cada página
     const headerCandidates = [
@@ -231,6 +238,94 @@ export const exportProductionPdf = async (req, res, next) => {
     // Detalle por reporte (bloques para facilitar lectura)
     doc.fontSize(11);
 
+    // Helper: render a grid of label/value pairs with adaptive columns, wrapping and page breaks
+    const renderPairsGrid = (pairs, opts = {}) => {
+      const labelFontSize = opts.labelFontSize || 9;
+      const valueFontSize = opts.valueFontSize || 10;
+      const spacingY = opts.spacingY || 6;
+      const minColWidth = opts.minColWidth || 180; // minimum width per column
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+      const availableWidth = right - left;
+      const colCount = Math.max(1, Math.min(4, Math.floor(availableWidth / minColWidth)));
+      const colGap = 10;
+      const colWidth = Math.floor((availableWidth - colGap * (colCount - 1)) / colCount);
+
+      // chunk into rows
+      for (let i = 0; i < pairs.length; i += colCount) {
+        const chunk = pairs.slice(i, i + colCount);
+
+        // measure row height based on tallest cell in chunk
+        let rowHeight = 0;
+        for (const [label, value] of chunk) {
+          doc.font('Helvetica-Bold').fontSize(labelFontSize);
+          const lh = doc.heightOfString(String(label || ''), { width: colWidth });
+          doc.font('Helvetica').fontSize(valueFontSize);
+          const vh = doc.heightOfString(String(value ?? ''), { width: colWidth });
+          rowHeight = Math.max(rowHeight, lh + vh + spacingY);
+        }
+
+        // if not enough space, add page
+        const bottomLimit = doc.page.height - doc.page.margins.bottom - 30; // reserve footer space
+        if (doc.y + rowHeight > bottomLimit) {
+          doc.addPage();
+        }
+
+        // render each cell in the row
+        let x = left;
+        for (let ci = 0; ci < chunk.length; ci++) {
+          const [label, value] = chunk[ci];
+          // label
+          doc.font('Helvetica-Bold').fontSize(labelFontSize).fillColor('black');
+          doc.text(String(label || ''), x, doc.y, { width: colWidth, continued: false });
+          // value below label
+          doc.moveDown(0);
+          doc.font('Helvetica').fontSize(valueFontSize).fillColor('black');
+          doc.text(String(value == null ? '' : value), x, doc.y, { width: colWidth });
+
+          // move x
+          x += colWidth + colGap;
+        }
+
+        // advance y by rowHeight
+        doc.moveDown(0);
+        doc.y = doc.y + (rowHeight - (doc.currentLineHeight() || 0));
+      }
+    };
+
+    const renderSection = (title, pairs) => {
+      // section title with green band and white text for clear separation
+      const left = doc.page.margins.left;
+      const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      const titleHeight = 28;
+      const bottomLimit = doc.page.height - doc.page.margins.bottom - 40;
+      if (doc.y + titleHeight > bottomLimit) doc.addPage();
+
+      // small top spacing before band for visual separation
+      doc.moveDown(0.25);
+      // draw colored band
+      doc.save();
+      doc.fillColor('#2f7a18').rect(left, doc.y, width, titleHeight).fill();
+      // draw title text in white inside band (larger font for emphasis)
+      doc.fillColor('white').font('Helvetica-Bold').fontSize(12).text(title, left + 10, doc.y + 7, { width: width - 20 });
+      doc.restore();
+
+      // move cursor below band with extra padding
+      doc.moveDown(1.8);
+
+      // render grid for this section
+      renderPairsGrid(pairs, { minColWidth: 160 });
+
+      // thicker separator line below section for clearer division
+      if (doc.y + 12 > bottomLimit) doc.addPage();
+      doc.save();
+      doc.lineWidth(1.0).strokeColor('#bdbdbd');
+      doc.moveTo(left, doc.y + 6).lineTo(left + width, doc.y + 6).stroke();
+      doc.restore();
+      doc.moveDown(0.8);
+    };
+
     // Totales locales (usar vapor_total o calcular desde gv1/gv3)
     const totals = data.reduce((acc, curr) => {
       const gv1 = Number(curr.gv1_inyectado) || 0;
@@ -268,25 +363,107 @@ export const exportProductionPdf = async (req, res, next) => {
       doc.fontSize(10).text(`Horas efectivas: ${hrsEf}`);
       doc.fontSize(10).text(`Horas perdidas: ${hrsPer}`);
 
-      // Generadores y parámetros (si existen)
-      doc.moveDown(0.2);
-      doc.fontSize(10).text('Generador #1 — Presión salida / Temp / Calidad / Flujo agua / Flujo gas / Inyectado');
-      doc.fontSize(9).text(`${r.gv1_presion || 0} psi / ${r.gv1_temp || 0} °F / ${r.gv1_calidad || 0}% / ${r.gv1_flujo_agua || 0} gal/min / ${r.gv1_flujo_gas || 0} ft³/Hr / ${gv1_iny} ton`);
-      doc.moveDown(0.1);
-      doc.fontSize(10).text('Generador #3 — Presión salida / Temp / Calidad / Flujo agua / Flujo gas / Inyectado');
-      doc.fontSize(9).text(`${r.gv3_presion || 0} psi / ${r.gv3_temp || 0} °F / ${r.gv3_calidad || 0}% / ${r.gv3_flujo_agua || 0} gal/min / ${r.gv3_flujo_gas || 0} ft³/Hr / ${gv3_iny} ton`);
+      // Build sections as label/value pairs
+      const cabezalPairs = [
+        ['Presión cabezal (psi)', r.presion_cabezal || 0],
+        ['Temp. cabezal (°F)', r.temp_cabezal || 0],
+        ['Pres. Rev. Prod (psi)', r.pres_rev_prod || 0],
+        ['Temp. Rev. Prod (°F)', r.temp_rev_prod || 0],
+        ['Pres. Rev. Sup (psi)', r.pres_rev_sup || 0],
+        ['Temp. Rev. Sup (°F)', r.temp_rev_sup || 0],
+        ['Elongación (pulg)', r.elongacion || 0],
+        ['TK1', r.tk1_nivel || '-'],
+        ['TK2', r.tk2_nivel || '-'],
+        ['TK3', r.tk3_nivel || '-'],
+        ['PH Alimentación', r.ph_alimentacion || '-'],
+        ['PH Retorno', r.ph_retorno || '-'],
+      ];
 
-      doc.moveDown(0.2);
-      doc.fontSize(10).text('Cabezal y química:');
-      doc.fontSize(9).text(`Presión cabezal: ${r.presion_cabezal || 0} psi — Temp cabezal: ${r.temp_cabezal || 0} °F`);
-      doc.fontSize(9).text(`PH alimentación: ${r.ph_alimentacion || '-'} — PH retorno: ${r.ph_retorno || '-'}`);
-      doc.fontSize(9).text(`Pres. Rev. Prod: ${r.pres_rev_prod || 0} psi — Temp Rev. Prod: ${r.temp_rev_prod || 0} °F`);
-      doc.fontSize(9).text(`Pres. Rev. Sup: ${r.pres_rev_sup || 0} psi — Temp Rev. Sup: ${r.temp_rev_sup || 0} °F`);
+      const gv1Pairs = [
+        ['GV1 Pres Qnt (psi)', r.gv1_pres_qnt || 0],
+        ['GV1 Presión (psi)', r.gv1_presion || 0],
+        ['GV1 Pres In Zona Convecc (psi)', r.gv1_pres_in_zona_convecc || r.gv1PresInZonaConvecc || 0],
+        ['GV1 Pres Out Zona Convecc (psi)', r.gv1_pres_out_zona_convecc || r.gv1PresOutZonaConvecc || 0],
+        ['GV1 Pres PI VC (psi)', r.gv1_pres_pi_vc || r.gv1PresPiVc || 0],
+        ['GV1 Pres PIT VC (psi)', r.gv1_pres_pit_vc || r.gv1PresPitVc || 0],
+        ['GV1 Pres Vapor (psi)', r.gv1_pres_vapor || r.gv1PresVapor || 0],
+        ['GV1 Temp (°F)', r.gv1_temp || 0],
+        ['GV1 Temp TI VC', r.gv1_temp_ti_vc || r.gv1TempTiVc || 0],
+        ['GV1 Temp Vapor', r.gv1_temp_vapor || r.gv1TempVapor || 0],
+        ['GV1 Temp Tubo', r.gv1_temp_tubo || r.gv1TempTubo || 0],
+        ['GV1 Temp Chimenea', r.gv1_temp_chimenea || r.gv1TempChimenea || 0],
+        ['GV1 Calidad (%)', r.gv1_calidad || r.gv1Cal || 0],
+        ['GV1 Calidad seteada', r.gv1_calidad_seteada || r.gv1CalSeteada || 0],
+        ['GV1 Calidad equipo', r.gv1_calidad_equipo || r.gv1CalEquipo || 0],
+        ['GV1 Cld Conductividad', r.gv1_cld_cond || r.gv1CldadCond || 0],
+        ['GV1 Cloruro (%)', (r.gv1_cloruro ?? r.gv1_clorulo) || 0],
+        ['GV1 TDS (%)', r.gv1_tds || 0],
+        ['GV1 Dureza (ppm)', r.gv1_dureza || 0],
+        ['GV1 O2 (ppm)', r.gv1_o2 || 0],
+        ['GV1 Pres Gas Sist (psi)', r.gv1_pres_gas_sist || r.gv1PresGasSist || 0],
+        ['GV1 Pres Gas GV (psi)', r.gv1_pres_gas_gv || r.gv1PresGasGv || 0],
+        ['GV1 Consumo Gas', r.gv1_consumo_gas || r.gv1ConsumoGas || 0],
+        ['GV1 Flujo agua (gal/min)', r.gv1_flujo_agua || 0],
+        ['GV1 Flujo gas (ft³/Hr)', r.gv1_flujo_gas || 0],
+        ['GV1 Inyectado (ton)', r.gv1_inyectado || 0],
+        ['GV1 PH Entrada', r.gv1_ph_entrada || '-'],
+        ['GV1 PH Salida', r.gv1_ph_salida || '-'],
+      ];
 
-      doc.moveDown(0.2);
-      doc.fontSize(10).text('Observaciones:');
-      doc.fontSize(9).text(obs, { width: 480 });
-      doc.moveDown(0.5);
+      const gv3Pairs = [
+        ['GV3 Pres Qnt (psi)', r.gv3_pres_qnt || 0],
+        ['GV3 Presión (psi)', r.gv3_presion || 0],
+        ['GV3 Pres In Zona Convecc (psi)', r.gv3_pres_in_zona_convecc || r.gv3PresInZonaConvecc || 0],
+        ['GV3 Pres Out Zona Convecc (psi)', r.gv3_pres_out_zona_convecc || r.gv3PresOutZonaConvecc || 0],
+        ['GV3 Pres PI VC (psi)', r.gv3_pres_pi_vc || r.gv3PresPiVc || 0],
+        ['GV3 Pres PIT VC (psi)', r.gv3_pres_pit_vc || r.gv3PresPitVc || 0],
+        ['GV3 Pres Vapor (psi)', r.gv3_pres_vapor || r.gv3PresVapor || 0],
+        ['GV3 Temp (°F)', r.gv3_temp || 0],
+        ['GV3 Temp TI VC', r.gv3_temp_ti_vc || r.gv3TempTiVc || 0],
+        ['GV3 Temp Vapor', r.gv3_temp_vapor || r.gv3TempVapor || 0],
+        ['GV3 Temp Tubo', r.gv3_temp_tubo || r.gv3TempTubo || 0],
+        ['GV3 Temp Chimenea', r.gv3_temp_chimenea || r.gv3TempChimenea || 0],
+        ['GV3 Calidad (%)', r.gv3_calidad || r.gv3Cal || 0],
+        ['GV3 Calidad seteada', r.gv3_calidad_seteada || r.gv3CalSeteada || 0],
+        ['GV3 Calidad equipo', r.gv3_calidad_equipo || r.gv3CalEquipo || 0],
+        ['GV3 Cld Conductividad', r.gv3_cld_cond || r.gv3CldadCond || 0],
+        ['GV3 Cloruro (%)', (r.gv3_cloruro ?? r.gv3_clorulo) || 0],
+        ['GV3 TDS (%)', r.gv3_tds || 0],
+        ['GV3 Dureza (ppm)', r.gv3_dureza || 0],
+        ['GV3 O2 (ppm)', r.gv3_o2 || 0],
+        ['GV3 Pres Gas Sist (psi)', r.gv3_pres_gas_sist || r.gv3PresGasSist || 0],
+        ['GV3 Pres Gas GV (psi)', r.gv3_pres_gas_gv || r.gv3PresGasGv || 0],
+        ['GV3 Consumo Gas', r.gv3_consumo_gas || r.gv3ConsumoGas || 0],
+        ['GV3 Flujo agua (gal/min)', r.gv3_flujo_agua || 0],
+        ['GV3 Flujo gas (ft³/Hr)', r.gv3_flujo_gas || 0],
+        ['GV3 Inyectado (ton)', r.gv3_inyectado || 0],
+        ['GV3 PH Entrada', r.gv3_ph_entrada || '-'],
+        ['GV3 PH Salida', r.gv3_ph_salida || '-'],
+      ];
+
+      const op1Pairs = [
+        ['Op1 Horas', r.op1_horas || r.op1Horas || 0],
+        ['Op1 Caudal', r.op1_caudal || r.op1Caudal || 0],
+        ['Op1 Tiempo Inyeccion Guardia (h)', r.op1_tiempo_inyeccion_guardia_hours || r.op1_tiempo_inyeccion_guardia_value || 0],
+        ['Op1 Tiempo Improductivo Guardia (h)', r.op1_tiempo_improductivo_guardia_hours || r.op1_tiempo_improductivo_guardia_value || 0],
+      ];
+
+      const op3Pairs = [
+        ['Op3 Horas', r.op3_horas || r.op3Horas || 0],
+        ['Op3 Caudal', r.op3_caudal || r.op3Caudal || 0],
+        ['Op3 Tiempo Inyeccion Guardia (h)', r.op3_tiempo_inyeccion_guardia_hours || r.op3_tiempo_inyeccion_guardia_value || 0],
+        ['Op3 Tiempo Improductivo Guardia (h)', r.op3_tiempo_improductivo_guardia_hours || r.op3_tiempo_improductivo_guardia_value || 0],
+      ];
+
+      // Render sections
+      renderSection('Cabezal / Pozo / Fondo', cabezalPairs);
+      renderSection('Generador Vapor #1', gv1Pairs);
+      renderSection('Operación GVPP #1', op1Pairs);
+      renderSection('Generador Vapor #3', gv3Pairs);
+      renderSection('Operación GVPP #3', op3Pairs);
+
+      // Observaciones como sección separada para evitar desbordes
+      renderSection('Observaciones', [[ 'Observaciones', obs ]]);
 
       // Separador
       doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).stroke();

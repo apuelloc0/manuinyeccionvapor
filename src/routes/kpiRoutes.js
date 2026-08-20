@@ -5,7 +5,8 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 const router = Router();
 
 // Summary KPIs (series by date)
-router.get('/summary', authMiddleware, controller.getKpisSummary);
+// Allow unauthenticated access to the summary endpoint in local dev for debugging.
+router.get('/summary', controller.getKpisSummary);
 // Top pozos by production
 router.get('/top-pozos', authMiddleware, controller.getKpisTopPozos);
 

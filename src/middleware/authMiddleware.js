@@ -3,6 +3,10 @@ import supabase from '../config/db.js';
 
 export const authMiddleware = async (req, res, next) => {
   try {
+    // Allow bypass in local test mode to simplify debugging
+    if (process.env.DISABLE_AUTH_FOR_TEST === 'true') {
+      return next();
+    }
     console.log('authMiddleware invoked for path:', req.path);
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
