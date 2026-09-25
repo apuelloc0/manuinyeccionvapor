@@ -19,6 +19,10 @@ router.use(authenticate, requirePermission('INVENTARIO_GESTION'));
 // ---- Movimientos globales (debe ir antes de /:id) ----
 router.get('/movements', controller.listMovements);
 
+// ---- Prueba de alertas (Telegram) ----
+router.post('/test-alert', controller.testAlert);
+router.post('/daily-alerts', controller.dailyAlerts);
+
 // ---- Materiales ----
 router.get('/', ...listQueryValidator, validate, controller.listItems);
 router.post('/', ...createItemValidator, validate, controller.createItem);

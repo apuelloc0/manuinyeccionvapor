@@ -1,15 +1,15 @@
 /**
  * Servicio de notificaciones por Telegram.
  *
- * Requiere en el .env:
- *   TELEGRAM_BOT_TOKEN  -> token que da @BotFather
+  * Requiere en el .env:
+ *   TELEGRAM_TOKEN      -> token que da @BotFather
  *   TELEGRAM_CHAT_ID    -> tu chat id (o el de un grupo)
  *
  * Si alguna de las dos no está configurada, el servicio queda en modo
  * "deshabilitado" y no lanza errores (simplemente no envía nada).
  */
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 /** ¿Está configurado Telegram? */
@@ -25,7 +25,7 @@ const esc = (s) =>
  */
 export async function sendTelegramMessage(text) {
   if (!isTelegramEnabled()) {
-    console.warn('⚠️ Telegram no configurado (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID). Mensaje omitido.');
+    console.warn('⚠️ Telegram no configurado (TELEGRAM_TOKEN / TELEGRAM_CHAT_ID). Mensaje omitido.');
     return { ok: false, skipped: true };
   }
 
@@ -70,5 +70,27 @@ export async function sendTestMessage() {
   const text =
     `<b>✅ Prueba de alertas SteamTrack</b>\n\n` +
     `Si ves este mensaje, las notificaciones por Telegram están funcionando correctamente.`;
+  return sendTelegramMessage(text);
+}
+
+/**
+ * Envía un recordatorio diario resumiendo TODOS los materiales en stock crítico
+ * en un solo mensaje (evita spam).
+ * @param {Array<{name:string, code?:string, stock:number, min_stock:number}>} items
+ */
+export async function sendLowStockDigest(items) {
+  const list = items
+    .map((i) => {
+      const code = i.code ? ` (${esc(i.code)})` : '';
+      return `• <b>${esc(i.name)}</b>${code}: <b>${i.stock}</b> / mín. ${i.min_stock}`;
+    })
+    .join('\n');
+
+  const text =
+    `<b>⚠️ Recordatorio diario — Stock bajo</b>\n\n` +
+    `Estos materiales siguen por debajo del mínimo:\n\n` +
+    `${list}\n\n` +
+    `👉 Actualiza el inventario para dejar de recibir este recordatorio.`;
+
   return sendTelegramMessage(text);
 }

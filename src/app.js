@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/authRoutes.js';
 import apiRoutes from './routes/index.js'; // Importamos el router principal
+import telegramRoutes from './routes/telegramRoutes.js';
 
 const app = express();
 
@@ -53,6 +54,9 @@ const apiLimiter = rateLimit({
 
 
 // Definición de rutas base
+// Webhook de Telegram: se monta ANTES del rate limit (Telegram no debe ser limitado)
+app.use('/api/telegram', telegramRoutes);
+
 // Aplicamos rate limiters: authLimiter a rutas de autenticación, apiLimiter al resto
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api', apiLimiter, apiRoutes); // Montamos el router principal bajo /api

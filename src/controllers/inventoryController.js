@@ -1,5 +1,6 @@
 import supabase from '../config/db.js';
 import { logActivity } from '../services/auditService.js';
+import { sendStockAlert, sendTestMessage, sendLowStockDigest } from '../services/telegramService.js';
 import { INVENTORY_TABLE, INVENTORY_MOVEMENTS_TABLE } from '../models/Inventory.js';
 
 // ==========================================
@@ -10,6 +11,22 @@ const toNumberOrZero = (v) => {
   if (v === null || v === undefined || v === '') return 0;
   const num = Number(v);
   return Number.isFinite(num) ? num : 0;
+};
+
+/**
+ * Envía una alerta por Telegram SOLO cuando el stock cruza el mínimo
+ * de arriba hacia abajo (evita avisos repetidos en cada movimiento).
+ * Es "fire and forget": no bloquea la respuesta si Telegram falla.
+ */
+const maybeAlertLowStock = (item, oldStock, newStock) => {
+  const minStock = toNumberOrZero(item.min_stock);
+  const from = toNumberOrZero(oldStock);
+  const to = toNumberOrZero(newStock);
+  if (minStock > 0 && from > minStock && to <= minStock) {
+    sendStockAlert({ item, stock: to, minStock }).catch((e) =>
+      console.error('❌ No se pudo enviar la alerta de stock por Telegram:', e.message)
+    );
+  }
 };
 
 /**
@@ -142,6 +159,9 @@ export const updateItem = async (req, res, next) => {
       new_value: data,
     });
 
+    // Alerta si la edición dejó el stock por debajo del mínimo
+    maybeAlertLowStock(data, current.stock, data.stock);
+
     res.json({ ok: true, data, message: 'Material actualizado exitosamente.' });
   } catch (err) {
     next(err);
@@ -193,85 +213,112 @@ export const removeItem = async (req, res, next) => {
 // ==========================================
 
 /**
- * Registrar un movimiento (entrada / salida / ajuste) y actualizar el stock.
+ * Aplica un movimiento de stock y lo registra en el kardex.
+ * Reutilizable por el endpoint HTTP y por el bot de Telegram.
  * Reglas de stock:
  *   entrada -> stock + cantidad
  *   salida  -> stock - cantidad (no permite negativo)
  *   ajuste  -> el stock pasa a ser exactamente 'cantidad'
+ * @returns {Promise<{ movement: object, stock: number, item: object }>}
  */
+export const applyMovement = async ({ id, tipo, cantidad, motivo, notas, userId }) => {
+  const { data: item, error: itemError } = await supabase
+    .from(INVENTORY_TABLE)
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (itemError || !item) {
+    const e = new Error('Material no encontrado.');
+    e.status = 404;
+    throw e;
+  }
+
+  const qty = toNumberOrZero(cantidad);
+  const stockAnterior = toNumberOrZero(item.stock);
+  let stockNuevo = stockAnterior;
+
+  if (tipo === 'entrada') {
+    stockNuevo = stockAnterior + qty;
+  } else if (tipo === 'salida') {
+    if (qty > stockAnterior) {
+      const e = new Error(`Stock insuficiente. Disponible: ${stockAnterior}.`);
+      e.status = 400;
+      throw e;
+    }
+    stockNuevo = stockAnterior - qty;
+  } else if (tipo === 'ajuste') {
+    stockNuevo = qty;
+  } else {
+    const e = new Error('Tipo de movimiento inválido.');
+    e.status = 400;
+    throw e;
+  }
+
+  // Actualizar stock del material
+  const { error: updateError } = await supabase
+    .from(INVENTORY_TABLE)
+    .update({ stock: stockNuevo, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (updateError) throw updateError;
+
+  // Registrar movimiento en el kardex
+  const { data: movement, error: movementError } = await supabase
+    .from(INVENTORY_MOVEMENTS_TABLE)
+    .insert([{
+      item_id: id,
+      tipo,
+      cantidad: qty,
+      stock_anterior: stockAnterior,
+      stock_nuevo: stockNuevo,
+      motivo: motivo?.trim() || null,
+      notas: notas?.trim() || null,
+      user_id: userId ?? null,
+    }])
+    .select()
+    .single();
+
+  if (movementError) throw movementError;
+
+  await logActivity({
+    user_id: userId,
+    action: tipo === 'entrada' ? 'CREATE' : 'UPDATE',
+    table_name: INVENTORY_MOVEMENTS_TABLE,
+    record_id: movement.id,
+    new_value: { ...movement, material: item.name },
+  });
+
+  // Alerta de stock bajo si este movimiento cruzó el mínimo
+  maybeAlertLowStock(item, stockAnterior, stockNuevo);
+
+  return { movement, stock: stockNuevo, item };
+};
+
+/** Registrar un movimiento (entrada / salida / ajuste) vía HTTP. */
 export const createMovement = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { tipo, cantidad, motivo, notas } = req.body;
 
-    const { data: item, error: itemError } = await supabase
-      .from(INVENTORY_TABLE)
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (itemError || !item) {
-      return res.status(404).json({ ok: false, message: 'Material no encontrado.' });
-    }
-
-    const qty = toNumberOrZero(cantidad);
-    const stockAnterior = toNumberOrZero(item.stock);
-    let stockNuevo = stockAnterior;
-
-    if (tipo === 'entrada') {
-      stockNuevo = stockAnterior + qty;
-    } else if (tipo === 'salida') {
-      if (qty > stockAnterior) {
-        return res.status(400).json({
-          ok: false,
-          message: `Stock insuficiente. Disponible: ${stockAnterior}.`,
-        });
-      }
-      stockNuevo = stockAnterior - qty;
-    } else if (tipo === 'ajuste') {
-      stockNuevo = qty;
-    }
-
-    // Actualizar stock del material
-    const { error: updateError } = await supabase
-      .from(INVENTORY_TABLE)
-      .update({ stock: stockNuevo, updated_at: new Date().toISOString() })
-      .eq('id', id);
-
-    if (updateError) throw updateError;
-
-    // Registrar movimiento en el kardex
-    const { data: movement, error: movementError } = await supabase
-      .from(INVENTORY_MOVEMENTS_TABLE)
-      .insert([{
-        item_id: id,
-        tipo,
-        cantidad: qty,
-        stock_anterior: stockAnterior,
-        stock_nuevo: stockNuevo,
-        motivo: motivo?.trim() || null,
-        notas: notas?.trim() || null,
-        user_id: req.user.id,
-      }])
-      .select()
-      .single();
-
-    if (movementError) throw movementError;
-
-    await logActivity({
-      user_id: req.user.id,
-      action: tipo === 'entrada' ? 'CREATE' : 'UPDATE',
-      table_name: INVENTORY_MOVEMENTS_TABLE,
-      record_id: movement.id,
-      new_value: { ...movement, material: item.name },
+    const { movement, stock } = await applyMovement({
+      id,
+      tipo,
+      cantidad,
+      motivo,
+      notas,
+      userId: req.user?.id,
     });
 
     res.status(201).json({
       ok: true,
-      data: { movement, stock: stockNuevo },
+      data: { movement, stock },
       message: 'Movimiento registrado exitosamente.',
     });
   } catch (err) {
+    if (err.status === 400 || err.status === 404) {
+      return res.status(err.status).json({ ok: false, message: err.message });
+    }
     next(err);
   }
 };
@@ -317,6 +364,61 @@ export const listItemMovements = async (req, res, next) => {
     if (error) throw error;
 
     res.json({ ok: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Enviar una alerta de prueba por Telegram.
+ * Sirve para verificar que la configuración del .env funciona.
+ */
+export const testAlert = async (req, res, next) => {
+  try {
+    const result = await sendTestMessage();
+    res.json({ ok: true, message: 'Alerta de prueba enviada.', data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Consulta el inventario y envía UN solo mensaje con todos los materiales en
+ * stock crítico (stock <= min_stock).
+ * Se usa desde el scheduler diario y desde el endpoint manual.
+ * @returns {Promise<{ok:boolean, count:number, skipped?:boolean}>}
+ */
+export const sendDailyLowStockAlerts = async () => {
+  const { data, error } = await supabase
+    .from(INVENTORY_TABLE)
+    .select('id, name, code, stock, min_stock')
+    .eq('activo', true)
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+
+  const low = (data || []).filter(
+    (i) => toNumberOrZero(i.min_stock) > 0 && toNumberOrZero(i.stock) <= toNumberOrZero(i.min_stock)
+  );
+
+  // Si ya no hay nada en crítico, no se envía nada (así "deja de llegar" solo)
+  if (low.length === 0) return { ok: true, count: 0, skipped: true };
+
+  await sendLowStockDigest(low);
+  return { ok: true, count: low.length };
+};
+
+/** Endpoint HTTP para disparar el recordatorio manualmente (o probarlo). */
+export const dailyAlerts = async (req, res, next) => {
+  try {
+    const result = await sendDailyLowStockAlerts();
+    res.json({
+      ok: true,
+      message: result.skipped
+        ? 'No hay materiales en stock crítico.'
+        : `Recordatorio enviado (${result.count} materiales).`,
+      data: result,
+    });
   } catch (err) {
     next(err);
   }
